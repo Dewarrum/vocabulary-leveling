@@ -1,9 +1,9 @@
 package mpd
 
 type SegmentList struct {
-	Timescale      string          `xml:"timescale,attr"`
-	Duration       string          `xml:"duration,attr"`
-	StartNumber    string          `xml:"startNumber,attr"`
-	Initialization *Initialization `xml:"Initialization"`
-	Segments       []*Segment      `xml:"SegmentURL"`
+	Timescale      string          `xml:"timescale,attr,omitempty"`
+	Duration       string          `xml:"duration,attr,omitempty"`
+	StartNumber    string          `xml:"startNumber,attr,omitempty"`
+	Initialization *Initialization `xml:"Initialization,omitempty"`
+	Segments       []*Segment      `xml:"SegmentURL,omitempty"`
 }
