@@ -2,6 +2,7 @@ package videos
 
 import (
 	"context"
+	"dewarrum/vocabulary-leveling/internal/app"
 	"encoding/json"
 	"errors"
 
@@ -101,25 +102,27 @@ func (mq *MessageQueue) Consume() (<-chan ExportVideoMessage, error) {
 	return messages, nil
 }
 
-func NewMessageQueue(channel *amqp091.Channel) (*MessageQueue, error) {
-	queue, err := createQueue(channel)
+func NewMessageQueue(dependencies *app.Dependencies) (*MessageQueue, error) {
+	queue, err := createQueue(dependencies.RabbitMqChannel)
 	if err != nil {
 		return nil, err
 	}
 
-	err = channel.ExchangeDeclare(exchange, "direct", true, false, false, false, nil)
+	err = dependencies.RabbitMqChannel.ExchangeDeclare(exchange, "direct", true, false, false, false, nil)
 	if err != nil {
 		return nil, errors.Join(err, errors.New(FailedToDeclareExchange))
 	}
 
-	err = channel.QueueBind(queue.Name, "", exchange, false, nil)
+	err = dependencies.RabbitMqChannel.QueueBind(queue.Name, "", exchange, false, nil)
 	if err != nil {
 		return nil, errors.Join(err, errors.New(FailedToBindQueue))
 	}
 
 	return &MessageQueue{
-		channel: channel,
+		channel: dependencies.RabbitMqChannel,
 		queue:   queue,
+		logger:  dependencies.Logger,
+		tracer:  dependencies.Tracer,
 	}, nil
 }
 

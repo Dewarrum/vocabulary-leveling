@@ -10,7 +10,7 @@ import (
 func MapEndpoints(app fiber.Router, dependencies *app.Dependencies) error {
 	subtitleCueRepository := subtitles.NewSubtitleCueRepository(dependencies.Postgres, dependencies.Logger)
 	fileStorage := NewFileStorage(dependencies.S3Client, dependencies.S3PresignClient)
-	messageQueue, err := NewMessageQueue(dependencies.RabbitMqChannel)
+	messageQueue, err := NewMessageQueue(dependencies)
 	if err != nil {
 		return err
 	}

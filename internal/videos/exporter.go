@@ -3,6 +3,8 @@ package videos
 import (
 	"context"
 	"dewarrum/vocabulary-leveling/internal/app"
+	"dewarrum/vocabulary-leveling/internal/manifests"
+	"dewarrum/vocabulary-leveling/internal/mpd"
 	"errors"
 	"fmt"
 	"io"
@@ -19,23 +21,25 @@ var (
 )
 
 type Exporter struct {
-	fileStorage  *FileStorage
-	messageQueue *MessageQueue
-	logger       zerolog.Logger
-	tracer       trace.Tracer
+	manifestsRepository *manifests.ManifestsRepository
+	fileStorage         *FileStorage
+	messageQueue        *MessageQueue
+	logger              zerolog.Logger
+	tracer              trace.Tracer
 }
 
 func NewExporter(dependencies *app.Dependencies) (*Exporter, error) {
-	messageQueue, err := NewMessageQueue(dependencies.RabbitMqChannel)
+	messageQueue, err := NewMessageQueue(dependencies)
 	if err != nil {
 		return nil, errors.Join(err, errors.New("failed to create message queue"))
 	}
 
 	return &Exporter{
-		fileStorage:  NewFileStorage(dependencies.S3Client, dependencies.S3PresignClient),
-		messageQueue: messageQueue,
-		logger:       dependencies.Logger,
-		tracer:       dependencies.Tracer,
+		manifestsRepository: manifests.NewManifestRepository(dependencies),
+		fileStorage:         NewFileStorage(dependencies.S3Client, dependencies.S3PresignClient),
+		messageQueue:        messageQueue,
+		logger:              dependencies.Logger,
+		tracer:              dependencies.Tracer,
 	}, nil
 }
 
@@ -132,7 +136,6 @@ func (e *Exporter) exportVideo(directory string) error {
 		"-keyint_min", "30",
 		"-sc_threshold", "0",
 		"-seg_duration", "5",
-		"-use_template", "0",
 		"-init_seg_name", "output-init-stream$RepresentationID$.$ext$",
 		"-media_seg_name", "output-chunk-stream$RepresentationID$-$Number%05d$.$ext$",
 		"-f", "dash",
@@ -193,9 +196,15 @@ func (e *Exporter) uploadVideo(videoId uuid.UUID, directory string, context cont
 				return errors.Join(err, errors.New("failed to open file"))
 			}
 
+			// TODO: don't upload manifest to s3
 			err = e.fileStorage.UploadManifest(videoId, file, context)
 			if err != nil {
 				return errors.Join(err, errors.New("failed to upload manifest"))
+			}
+
+			err = e.saveManifest(videoId, directory, entry.Name(), context)
+			if err != nil {
+				return errors.Join(err, errors.New("failed to save manifest to database"))
 			}
 		}
 
@@ -203,6 +212,39 @@ func (e *Exporter) uploadVideo(videoId uuid.UUID, directory string, context cont
 	}
 
 	e.logger.Info().Str("videoId", videoId.String()).Msg("Finished uploading video")
+	return nil
+}
+
+func (e *Exporter) saveManifest(videoId uuid.UUID, directory, filename string, ctx context.Context) error {
+	file, err := os.Open(fmt.Sprintf("%s/%s", directory, filename))
+	if err != nil {
+		return errors.Join(err, errors.New("failed to open file"))
+	}
+
+	manifestBody, err := io.ReadAll(file)
+	if err != nil {
+		return errors.Join(err, errors.New("failed to read manifest file"))
+	}
+
+	originalManifest, err := mpd.Parse(manifestBody)
+	if err != nil {
+		return errors.Join(err, errors.New("failed to parse manifest"))
+	}
+
+	dbManifest, err := manifests.NewDbManifest(videoId, originalManifest)
+	if err != nil {
+		return errors.Join(err, errors.New("failed to create db manifest"))
+	}
+
+	_, err = e.manifestsRepository.Insert(dbManifest, ctx)
+	if errors.Is(err, manifests.ErrManifestAlreadyExists) {
+		return nil
+	}
+
+	if err != nil {
+		return errors.Join(err, errors.New("failed to insert manifest"))
+	}
+
 	return nil
 }
 
