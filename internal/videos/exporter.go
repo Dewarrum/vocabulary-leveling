@@ -6,14 +6,22 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/exec"
+
+	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/trace"
+)
+
+var (
+	ErrFailedToRun = errors.New("failed to run")
 )
 
 type Exporter struct {
-	FileStorage  *FileStorage
-	MessageQueue *MessageQueue
+	fileStorage  *FileStorage
+	messageQueue *MessageQueue
+	logger       zerolog.Logger
+	tracer       trace.Tracer
 }
 
 func NewExporter(dependencies *app.Dependencies) (*Exporter, error) {
@@ -23,31 +31,37 @@ func NewExporter(dependencies *app.Dependencies) (*Exporter, error) {
 	}
 
 	return &Exporter{
-		FileStorage:  NewFileStorage(dependencies.S3Client, dependencies.S3PresignClient),
-		MessageQueue: messageQueue,
+		fileStorage:  NewFileStorage(dependencies.S3Client, dependencies.S3PresignClient),
+		messageQueue: messageQueue,
+		logger:       dependencies.Logger,
+		tracer:       dependencies.Tracer,
 	}, nil
 }
 
-func (e *Exporter) Run(context context.Context) {
-	log.Print("Starting video exporter")
+func (e *Exporter) Run(context context.Context) error {
+	e.logger.Info().Msg("Starting video exporter")
 
-	messages, err := e.MessageQueue.Consume()
+	messages, err := e.messageQueue.Consume()
 	if err != nil {
-		log.Fatalf("Failed to register a consumer: %s", err)
-		return
+		e.logger.Fatal().Err(err).Msg("Failed to register a consumer")
+		return errors.Join(err, ErrFailedToRun)
 	}
 
-	for message := range messages {
-		log.Printf("Exporting video %s", message.VideoId)
+	go func() {
+		for message := range messages {
+			e.logger.Info().Str("videoId", message.VideoId).Msg("Exporting video")
 
-		err = e.handleMessage(message, context)
-		if err != nil {
-			log.Printf("Failed to export video %s: %s", message.VideoId, err)
-			continue
+			err = e.handleMessage(message, context)
+			if err != nil {
+				e.logger.Error().Str("videoId", message.VideoId).Err(err).Msg("Failed to export video")
+				continue
+			}
+
+			e.logger.Info().Str("videoId", message.VideoId).Msg("Video exported successfully")
 		}
+	}()
 
-		log.Printf("Video exported successfully %s", message.VideoId)
-	}
+	return nil
 }
 
 func (e *Exporter) handleMessage(message ExportVideoMessage, context context.Context) error {
@@ -62,7 +76,7 @@ func (e *Exporter) handleMessage(message ExportVideoMessage, context context.Con
 		return errors.Join(err, errors.New("failed to download video"))
 	}
 
-	err = exportVideo(directory)
+	err = e.exportVideo(directory)
 	if err != nil {
 		return errors.Join(err, errors.New("failed to run ffmpeg"))
 	}
@@ -81,14 +95,14 @@ func (e *Exporter) handleMessage(message ExportVideoMessage, context context.Con
 }
 
 func (e *Exporter) downloadVideo(videoId, directory string, context context.Context) error {
-	log.Printf("Downloading video %s", videoId)
+	e.logger.Info().Str("videoId", videoId).Msg("Start downloading video")
 
-	response, err := e.FileStorage.Download(videoId, context)
+	response, err := e.fileStorage.Download(videoId, context)
 	if err != nil {
 		return errors.Join(err, errors.New("failed to download video"))
 	}
 
-	log.Printf("Downloaded video %s", videoId)
+	e.logger.Info().Str("videoId", videoId).Msg("Finished downloading video")
 
 	path := fmt.Sprintf("%s/original", directory)
 	fi, err := os.Create(path)
@@ -102,13 +116,13 @@ func (e *Exporter) downloadVideo(videoId, directory string, context context.Cont
 		return errors.Join(err, errors.New("failed to download video"))
 	}
 
-	log.Printf("Saved downloaded video %s", videoId)
+	e.logger.Info().Str("videoId", videoId).Msg("Saved downloaded video to file system")
 
 	return nil
 }
 
-func exportVideo(directory string) error {
-	log.Printf("Running ffmpeg for video %s", directory)
+func (e *Exporter) exportVideo(directory string) error {
+	e.logger.Info().Str("videoId", directory).Msg("Running ffmpeg")
 
 	cmd := exec.Command(
 		"ffmpeg",
@@ -128,13 +142,13 @@ func exportVideo(directory string) error {
 		return errors.Join(err, errors.New("failed to run ffmpeg"))
 	}
 
-	log.Printf("Sucessfully exported video %s to dash format", directory)
+	e.logger.Info().Str("videoId", directory).Msg("Successfully exported video via ffmpeg")
 
 	return nil
 }
 
 func (e *Exporter) uploadVideo(videoId, directory string, context context.Context) error {
-	log.Printf("Uploading video %s", videoId)
+	e.logger.Info().Str("videoId", videoId).Msg("Start uploading video")
 
 	entries, err := os.ReadDir(directory)
 	if err != nil {
@@ -143,7 +157,7 @@ func (e *Exporter) uploadVideo(videoId, directory string, context context.Contex
 
 	for _, entry := range entries {
 		if entry.IsDir() {
-			log.Printf("Skipping file %s", entry.Name())
+			e.logger.Info().Str("videoId", videoId).Str("file", entry.Name()).Msg("Skipping file")
 			continue
 		}
 
@@ -153,7 +167,7 @@ func (e *Exporter) uploadVideo(videoId, directory string, context context.Contex
 				return errors.Join(err, errors.New("failed to open file"))
 			}
 
-			err = e.FileStorage.UploadChunkStream(videoId, entry.Name(), file, context)
+			err = e.fileStorage.UploadChunkStream(videoId, entry.Name(), file, context)
 			if err != nil {
 				return errors.Join(err, errors.New("failed to upload chunk stream"))
 			}
@@ -166,7 +180,7 @@ func (e *Exporter) uploadVideo(videoId, directory string, context context.Contex
 				return errors.Join(err, errors.New("failed to open file"))
 			}
 
-			err = e.FileStorage.UploadInitStream(videoId, entry.Name(), file, context)
+			err = e.fileStorage.UploadInitStream(videoId, entry.Name(), file, context)
 			if err != nil {
 				return errors.Join(err, errors.New("failed to upload init stream"))
 			}
@@ -178,16 +192,16 @@ func (e *Exporter) uploadVideo(videoId, directory string, context context.Contex
 				return errors.Join(err, errors.New("failed to open file"))
 			}
 
-			err = e.FileStorage.UploadManifest(videoId, file, context)
+			err = e.fileStorage.UploadManifest(videoId, file, context)
 			if err != nil {
 				return errors.Join(err, errors.New("failed to upload manifest"))
 			}
 		}
 
-		log.Printf("Skipping unknown file %s", entry.Name())
+		e.logger.Info().Str("videoId", videoId).Str("file", entry.Name()).Msg("Skipping unknown file")
 	}
 
-	log.Printf("Uploaded video %s", videoId)
+	e.logger.Info().Str("videoId", videoId).Msg("Finished uploading video")
 	return nil
 }
 

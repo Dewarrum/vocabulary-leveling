@@ -1,118 +1,91 @@
 package app
 
 import (
-	"errors"
-	"log"
-	"os"
+	"context"
 
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/rabbitmq/amqp091-go"
-)
-
-const (
-	MissingConfigurationError = "missing configuration"
+	"github.com/rs/zerolog"
+	"github.com/uptrace/uptrace-go/uptrace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Dependencies struct {
-	S3Client        *s3.Client
-	S3PresignClient *s3.PresignClient
-	RabbitMqChannel *amqp091.Channel
-	Postgres        *sqlx.DB
+	S3Client            *s3.Client
+	S3PresignClient     *s3.PresignClient
+	RabbitMqChannel     *amqp091.Channel
+	Postgres            *sqlx.DB
+	ElasticsearchClient *elasticsearch.TypedClient
+	Logger              zerolog.Logger
+	Tracer              trace.Tracer
 }
 
-func NewDependencies() (*Dependencies, error) {
+func NewDependencies(ctx context.Context) (*Dependencies, error) {
+	logger := createLogger()
+	logger.Info().Msg("Creating dependencies")
+
+	logger.Info().Msg("Initializing OpenTelemetry")
+	tracer, err := createTracer(ctx)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to initialize OpenTelemetry")
+		return nil, err
+	}
+
+	logger.Info().Msg("Creating S3 client")
 	s3Client, err := createS3Client()
 	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to create S3 client")
 		return nil, err
 	}
 
 	s3PresignClient := createS3PresignClient(s3Client)
 
+	logger.Info().Msg("Creating RabbitMQ channel")
 	rabbitMqChannel, err := createRabbitMqChannel()
 	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to create RabbitMQ channel")
 		return nil, err
 	}
 
-	db, err := createPostgresConnection()
+	logger.Info().Msg("Creating Postgres connection")
+	db, err := createPostgresConnection(logger)
 	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to create Postgres connection")
+		return nil, err
+	}
+
+	logger.Info().Msg("Creating Elasticsearch client")
+	elasticsearchClient, err := createElasticSearchClient()
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to create Elasticsearch client")
 		return nil, err
 	}
 
 	return &Dependencies{
-		S3Client:        s3Client,
-		S3PresignClient: s3PresignClient,
-		RabbitMqChannel: rabbitMqChannel,
-		Postgres:        db,
+		S3Client:            s3Client,
+		S3PresignClient:     s3PresignClient,
+		RabbitMqChannel:     rabbitMqChannel,
+		Postgres:            db,
+		ElasticsearchClient: elasticsearchClient,
+		Logger:              logger,
+		Tracer:              tracer,
 	}, nil
 }
 
-func createS3Client() (*s3.Client, error) {
-	accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
-	secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
-	region := os.Getenv("AWS_REGION")
-	endpointURL := os.Getenv("AWS_ENDPOINT_URL")
-
-	if accessKey == "" || secretKey == "" || region == "" || endpointURL == "" {
-		log.Fatal("AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION and AWS_ENDPOINT_URL must be set")
-		return nil, errors.New(MissingConfigurationError)
+func (d *Dependencies) Close(ctx context.Context) error {
+	if d.Postgres != nil {
+		d.Postgres.Close()
 	}
 
-	client := s3.New(s3.Options{
-		Credentials:  credentials.NewStaticCredentialsProvider(accessKey, secretKey, ""),
-		Region:       region,
-		BaseEndpoint: &endpointURL,
-		UsePathStyle: true,
-	})
-
-	return client, nil
-}
-
-func createS3PresignClient(s3Client *s3.Client) *s3.PresignClient {
-	return s3.NewPresignClient(s3Client)
-}
-
-func createRabbitMqChannel() (*amqp091.Channel, error) {
-	conn, err := amqp091.Dial(os.Getenv("RABBITMQ_URL"))
-	if err != nil {
-		log.Fatalf("Failed to connect to RabbitMQ: %s", err)
-		return nil, err
+	if d.RabbitMqChannel != nil {
+		d.Logger.Info().Msg("Closing RabbitMQ channel")
+		d.RabbitMqChannel.Close()
 	}
 
-	ch, err := conn.Channel()
-	if err != nil {
-		log.Fatalf("Failed to open a channel: %s", err)
-		return nil, err
-	}
+	uptrace.Shutdown(ctx)
 
-	return ch, nil
-}
-
-func createRabbitMqVideoExporterQueue(ch *amqp091.Channel) (*amqp091.Queue, error) {
-	q, err := ch.QueueDeclare(
-		"video-exporter", // name
-		true,             // durable
-		false,            // delete when unused
-		false,            // exclusive
-		false,            // no-wait
-		nil,              // arguments
-	)
-	if err != nil {
-		log.Fatalf("Failed to declare a queue: %s", err)
-		return nil, err
-	}
-
-	return &q, nil
-}
-
-func createPostgresConnection() (*sqlx.DB, error) {
-	db, err := sqlx.Connect("postgres", os.Getenv("POSTGRES_URL"))
-	if err != nil {
-		log.Fatalf("Failed to connect to Postgres: %s", err)
-		return nil, err
-	}
-
-	return db, nil
+	return nil
 }

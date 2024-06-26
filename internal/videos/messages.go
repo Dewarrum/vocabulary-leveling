@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 
 	"github.com/rabbitmq/amqp091-go"
+	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -22,6 +24,8 @@ const (
 type MessageQueue struct {
 	channel *amqp091.Channel
 	queue   *amqp091.Queue
+	logger  zerolog.Logger
+	tracer  trace.Tracer
 }
 
 type ExportVideoMessage struct {
@@ -34,14 +38,20 @@ func NewExportVideoMessage(videoId string) *ExportVideoMessage {
 	}
 }
 
-func (mq *MessageQueue) Send(message *ExportVideoMessage, context context.Context) error {
+func (mq *MessageQueue) Send(message *ExportVideoMessage, ctx context.Context) error {
+	ctx, span := mq.tracer.Start(ctx, "mq.send.videos.export")
+	span.SetAttributes(attribute.String("videoId", message.VideoId))
+	defer span.End()
+
+	mq.logger.Debug().Str("videoId", message.VideoId).Msg("Sending message")
+
 	body, err := json.Marshal(message)
 	if err != nil {
 		return err
 	}
 
 	err = mq.channel.PublishWithContext(
-		context,
+		ctx,
 		exchange, // exchange
 		"",       // routing key
 		false,    // mandatory
@@ -79,7 +89,7 @@ func (mq *MessageQueue) Consume() (<-chan ExportVideoMessage, error) {
 			var message ExportVideoMessage
 			err := json.Unmarshal(delivery.Body, &message)
 			if err != nil {
-				log.Fatalf("Failed to unmarshal message: %s", err)
+				mq.logger.Error().Err(err).Msg("Failed to unmarshal message")
 				continue
 			}
 

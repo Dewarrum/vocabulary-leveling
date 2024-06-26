@@ -5,35 +5,56 @@ import (
 	"dewarrum/vocabulary-leveling/internal/app"
 	"dewarrum/vocabulary-leveling/internal/subtitles"
 	"dewarrum/vocabulary-leveling/internal/videos"
+	"os"
+	"os/signal"
 
+	"github.com/gofiber/contrib/otelfiber"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/joho/godotenv"
 )
 
 func main() {
-	godotenv.Load()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
 
-	dependencies, err := app.NewDependencies()
+	godotenv.Load(".env")
+	godotenv.Load(".env.secret")
+
+	dependencies, err := app.NewDependencies(ctx)
 	if err != nil {
+		dependencies.Logger.Fatal().Err(err).Msg("Failed to create dependencies")
 		panic(err)
 	}
+	defer dependencies.Close(ctx)
 
 	videoExporter, err := videos.NewExporter(dependencies)
 	if err != nil {
+		dependencies.Logger.Fatal().Err(err).Msg("Failed to create video exporter")
 		panic(err)
 	}
-	go videoExporter.Run(context.Background())
-
-	subtitlesExporter, err := subtitles.NewExporter(dependencies)
+	err = videoExporter.Run(ctx)
 	if err != nil {
+		dependencies.Logger.Fatal().Err(err).Msg("Failed to run video exporter")
 		panic(err)
 	}
-	go subtitlesExporter.Run(context.Background())
+
+	subtitlesExporter, err := subtitles.NewExporter(dependencies, ctx)
+	if err != nil {
+		dependencies.Logger.Fatal().Err(err).Msg("Failed to create subtitles exporter")
+		panic(err)
+	}
+	err = subtitlesExporter.Run(ctx)
+	if err != nil {
+		dependencies.Logger.Fatal().Err(err).Msg("Failed to run subtitles exporter")
+		panic(err)
+	}
 
 	app := fiber.New(fiber.Config{
 		BodyLimit: 500 * 1024 * 1024,
 	})
+	app.Use(otelfiber.Middleware())
+
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.SendString("Hello World")
 	})
@@ -44,7 +65,9 @@ func main() {
 	}))
 
 	videos.MapEndpoints(api, dependencies)
-	subtitles.MapEndpoints(api, dependencies)
+	subtitles.MapEndpoints(api, dependencies, ctx)
 
-	app.Listen(":3000")
+	if err := app.Listen(":3000"); err != nil {
+		dependencies.Logger.Fatal().Err(err).Msg("Failed to start server")
+	}
 }

@@ -2,12 +2,15 @@ package subtitles
 
 import (
 	"context"
+	"dewarrum/vocabulary-leveling/internal/app"
 	"encoding/json"
 	"errors"
-	"log"
 
 	"github.com/google/uuid"
 	"github.com/rabbitmq/amqp091-go"
+	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -33,11 +36,20 @@ func NewExportSubtitlesMessage(videoId uuid.UUID) *ExportSubtitlesMessage {
 type MessageQueue struct {
 	channel *amqp091.Channel
 	queue   *amqp091.Queue
+	logger  zerolog.Logger
+	tracer  trace.Tracer
 }
 
 func (mq *MessageQueue) Send(message *ExportSubtitlesMessage, context context.Context) error {
+	_, span := mq.tracer.Start(context, "mq.send.subtitles.export")
+	span.SetAttributes(attribute.String("videoId", message.VideoId.String()))
+	defer span.End()
+
+	mq.logger.Info().Str("videoId", message.VideoId.String()).Msg("Sending message")
+
 	body, err := json.Marshal(message)
 	if err != nil {
+		span.RecordError(err, trace.WithStackTrace(true))
 		return err
 	}
 
@@ -53,14 +65,23 @@ func (mq *MessageQueue) Send(message *ExportSubtitlesMessage, context context.Co
 		},
 	)
 	if err != nil {
+		span.RecordError(err, trace.WithStackTrace(true))
 		return errors.Join(err, errors.New(FailedToSendMessage))
 	}
+
+	mq.logger.Info().Str("videoId", message.VideoId.String()).Msg("Message sent successfully")
 
 	return nil
 }
 
-func (mq *MessageQueue) Consume() (<-chan ExportSubtitlesMessage, error) {
-	deliveries, err := mq.channel.Consume(
+func (mq *MessageQueue) Consume(ctx context.Context) (<-chan ExportSubtitlesMessage, error) {
+	ctx, span := mq.tracer.Start(ctx, "mq.send.subtitles.export")
+	defer span.End()
+
+	mq.logger.Info().Msg("Starting to consume messages")
+
+	deliveries, err := mq.channel.ConsumeWithContext(
+		ctx,
 		mq.queue.Name,
 		"consumer.subtitles.export",
 		true,
@@ -77,11 +98,10 @@ func (mq *MessageQueue) Consume() (<-chan ExportSubtitlesMessage, error) {
 
 	go func() {
 		for delivery := range deliveries {
-			log.Printf("Received message: %s", delivery.Body)
 			var message ExportSubtitlesMessage
 			err := json.Unmarshal(delivery.Body, &message)
 			if err != nil {
-				log.Fatalf("Failed to unmarshal message: %s", err)
+				mq.logger.Error().Err(err).Msg("Failed to unmarshal message")
 				continue
 			}
 
@@ -92,25 +112,27 @@ func (mq *MessageQueue) Consume() (<-chan ExportSubtitlesMessage, error) {
 	return messages, nil
 }
 
-func NewMessageQueue(channel *amqp091.Channel) (*MessageQueue, error) {
-	queue, err := createQueue(channel)
+func NewMessageQueue(dependencies *app.Dependencies) (*MessageQueue, error) {
+	queue, err := createQueue(dependencies.RabbitMqChannel)
 	if err != nil {
 		return nil, err
 	}
 
-	err = channel.ExchangeDeclare(exchange, "direct", false, false, false, false, nil)
+	err = dependencies.RabbitMqChannel.ExchangeDeclare(exchange, "direct", false, false, false, false, nil)
 	if err != nil {
 		return nil, errors.Join(err, errors.New(FailedToDeclareExchange))
 	}
 
-	err = channel.QueueBind(queue.Name, "", exchange, false, nil)
+	err = dependencies.RabbitMqChannel.QueueBind(queue.Name, "", exchange, false, nil)
 	if err != nil {
 		return nil, errors.Join(err, errors.New(FailedToBindQueue))
 	}
 
 	return &MessageQueue{
-		channel: channel,
+		channel: dependencies.RabbitMqChannel,
 		queue:   queue,
+		logger:  dependencies.Logger,
+		tracer:  dependencies.Tracer,
 	}, nil
 }
 
