@@ -2,12 +2,14 @@ package videos
 
 import (
 	"dewarrum/vocabulary-leveling/internal/mpd"
+	"dewarrum/vocabulary-leveling/internal/subtitles"
 	"errors"
 	"net/http"
 	"slices"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 )
 
 func insertPresignedChunkStreams(segmentList *mpd.SegmentList, presignedUrls []string) error {
@@ -28,9 +30,19 @@ func insertPresignedInitStream(segmentList *mpd.SegmentList, presignedUrl string
 	segmentList.Initialization.SourceURL = presignedUrl
 }
 
-func manifest(router fiber.Router, fileStorage *FileStorage) {
+func manifest(router fiber.Router, fileStorage *FileStorage, subtitleCueRepository *subtitles.SubtitleCueRepository) {
 	router.Get("/manifest.mpd", func(c *fiber.Ctx) error {
-		videoId := c.Query("videoId")
+		subtitleCueId, err := uuid.Parse(c.Query("subtitleCueId"))
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(map[string]string{"error": err.Error()})
+		}
+
+		subtitle, err := subtitleCueRepository.GetById(subtitleCueId, c.Context())
+		if err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
+		}
+
+		videoId := subtitle.VideoId
 
 		presignedChunkStreams, err := fileStorage.PresignChunkStreams(videoId, c.Context())
 		if err != nil {

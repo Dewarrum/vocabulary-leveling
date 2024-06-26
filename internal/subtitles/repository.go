@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var (
@@ -41,6 +42,7 @@ func newDbSubtitleCue(videoId uuid.UUID, text string, sequence int, startMs int6
 type SubtitleCueRepository struct {
 	db     *sqlx.DB
 	logger zerolog.Logger
+	tracer trace.Tracer
 }
 
 func (r *SubtitleCueRepository) Insert(subtitleCue *DbSubtitleCue, context context.Context) (*DbSubtitleCue, error) {
@@ -103,7 +105,21 @@ func (r *SubtitleCueRepository) GetManyByIds(ids []uuid.UUID, context context.Co
 	return subtitleCues, nil
 }
 
-func newSubtitleCueRepository(db *sqlx.DB, logger zerolog.Logger) *SubtitleCueRepository {
+func (r *SubtitleCueRepository) GetById(id uuid.UUID, ctx context.Context) (*DbSubtitleCue, error) {
+	ctx, span := r.tracer.Start(ctx, "subtitles.repository.getById")
+	defer span.End()
+	r.logger.Debug().Str("id", id.String()).Msg("Searching subtitle cue by id")
+
+	var subtitleCue DbSubtitleCue
+	err := sqlx.GetContext(ctx, r.db, &subtitleCue, "SELECT * FROM subtitle_cues WHERE id = $1 LIMIT 1", id)
+	if err != nil {
+		return nil, errors.Join(err, ErrFailedToGetSubtitleCue)
+	}
+
+	return &subtitleCue, nil
+}
+
+func NewSubtitleCueRepository(db *sqlx.DB, logger zerolog.Logger) *SubtitleCueRepository {
 	return &SubtitleCueRepository{
 		db:     db,
 		logger: logger,

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/google/uuid"
 	"github.com/rabbitmq/amqp091-go"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
@@ -29,10 +30,10 @@ type MessageQueue struct {
 }
 
 type ExportVideoMessage struct {
-	VideoId string `json:"videoId"`
+	VideoId uuid.UUID `json:"videoId"`
 }
 
-func NewExportVideoMessage(videoId string) *ExportVideoMessage {
+func NewExportVideoMessage(videoId uuid.UUID) *ExportVideoMessage {
 	return &ExportVideoMessage{
 		VideoId: videoId,
 	}
@@ -40,10 +41,10 @@ func NewExportVideoMessage(videoId string) *ExportVideoMessage {
 
 func (mq *MessageQueue) Send(message *ExportVideoMessage, ctx context.Context) error {
 	ctx, span := mq.tracer.Start(ctx, "mq.send.videos.export")
-	span.SetAttributes(attribute.String("videoId", message.VideoId))
+	span.SetAttributes(attribute.String("videoId", message.VideoId.String()))
 	defer span.End()
 
-	mq.logger.Debug().Str("videoId", message.VideoId).Msg("Sending message")
+	mq.logger.Debug().Str("videoId", message.VideoId.String()).Msg("Sending message")
 
 	body, err := json.Marshal(message)
 	if err != nil {

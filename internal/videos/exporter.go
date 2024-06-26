@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -49,15 +50,15 @@ func (e *Exporter) Run(context context.Context) error {
 
 	go func() {
 		for message := range messages {
-			e.logger.Info().Str("videoId", message.VideoId).Msg("Exporting video")
+			e.logger.Info().Str("videoId", message.VideoId.String()).Msg("Exporting video")
 
 			err = e.handleMessage(message, context)
 			if err != nil {
-				e.logger.Error().Str("videoId", message.VideoId).Err(err).Msg("Failed to export video")
+				e.logger.Error().Str("videoId", message.VideoId.String()).Err(err).Msg("Failed to export video")
 				continue
 			}
 
-			e.logger.Info().Str("videoId", message.VideoId).Msg("Video exported successfully")
+			e.logger.Info().Str("videoId", message.VideoId.String()).Msg("Video exported successfully")
 		}
 	}()
 
@@ -94,15 +95,15 @@ func (e *Exporter) handleMessage(message ExportVideoMessage, context context.Con
 	return nil
 }
 
-func (e *Exporter) downloadVideo(videoId, directory string, context context.Context) error {
-	e.logger.Info().Str("videoId", videoId).Msg("Start downloading video")
+func (e *Exporter) downloadVideo(videoId uuid.UUID, directory string, context context.Context) error {
+	e.logger.Info().Str("videoId", videoId.String()).Msg("Start downloading video")
 
 	response, err := e.fileStorage.Download(videoId, context)
 	if err != nil {
 		return errors.Join(err, errors.New("failed to download video"))
 	}
 
-	e.logger.Info().Str("videoId", videoId).Msg("Finished downloading video")
+	e.logger.Info().Str("videoId", videoId.String()).Msg("Finished downloading video")
 
 	path := fmt.Sprintf("%s/original", directory)
 	fi, err := os.Create(path)
@@ -116,7 +117,7 @@ func (e *Exporter) downloadVideo(videoId, directory string, context context.Cont
 		return errors.Join(err, errors.New("failed to download video"))
 	}
 
-	e.logger.Info().Str("videoId", videoId).Msg("Saved downloaded video to file system")
+	e.logger.Info().Str("videoId", videoId.String()).Msg("Saved downloaded video to file system")
 
 	return nil
 }
@@ -147,8 +148,8 @@ func (e *Exporter) exportVideo(directory string) error {
 	return nil
 }
 
-func (e *Exporter) uploadVideo(videoId, directory string, context context.Context) error {
-	e.logger.Info().Str("videoId", videoId).Msg("Start uploading video")
+func (e *Exporter) uploadVideo(videoId uuid.UUID, directory string, context context.Context) error {
+	e.logger.Info().Str("videoId", videoId.String()).Msg("Start uploading video")
 
 	entries, err := os.ReadDir(directory)
 	if err != nil {
@@ -157,7 +158,7 @@ func (e *Exporter) uploadVideo(videoId, directory string, context context.Contex
 
 	for _, entry := range entries {
 		if entry.IsDir() {
-			e.logger.Info().Str("videoId", videoId).Str("file", entry.Name()).Msg("Skipping file")
+			e.logger.Info().Str("videoId", videoId.String()).Str("file", entry.Name()).Msg("Skipping file")
 			continue
 		}
 
@@ -198,10 +199,10 @@ func (e *Exporter) uploadVideo(videoId, directory string, context context.Contex
 			}
 		}
 
-		e.logger.Info().Str("videoId", videoId).Str("file", entry.Name()).Msg("Skipping unknown file")
+		e.logger.Info().Str("videoId", videoId.String()).Str("file", entry.Name()).Msg("Skipping unknown file")
 	}
 
-	e.logger.Info().Str("videoId", videoId).Msg("Finished uploading video")
+	e.logger.Info().Str("videoId", videoId.String()).Msg("Finished uploading video")
 	return nil
 }
 

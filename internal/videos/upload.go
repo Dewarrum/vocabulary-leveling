@@ -23,14 +23,14 @@ func upload(router fiber.Router, fileStorage *FileStorage) {
 
 		defer file.Close()
 
-		key := uuid.New()
+		videoId := uuid.New()
 
-		err = fileStorage.Upload(key.String(), file, fileHeader.Header.Get("Content-Type"), c.Context())
+		err = fileStorage.Upload(videoId, file, fileHeader.Header.Get("Content-Type"), c.Context())
 		if err != nil {
 			c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 			return nil
 		}
 
-		return c.Status(http.StatusOK).JSON(map[string]string{"key": key.String()})
+		return c.Status(http.StatusOK).JSON(map[string]string{"videoId": videoId.String()})
 	})
 }

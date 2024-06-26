@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/google/uuid"
 )
 
 const (
@@ -29,7 +30,7 @@ func NewFileStorage(s3Client *s3.Client, s3PresignClient *s3.PresignClient) *Fil
 	}
 }
 
-func (f *FileStorage) Upload(videoId string, body io.Reader, contentType string, context context.Context) error {
+func (f *FileStorage) Upload(videoId uuid.UUID, body io.Reader, contentType string, context context.Context) error {
 	_, err := f.s3Client.PutObject(context, &s3.PutObjectInput{
 		Bucket:      aws.String("default"),
 		Key:         aws.String(fmt.Sprintf("%s/original", videoId)),
@@ -43,7 +44,7 @@ func (f *FileStorage) Upload(videoId string, body io.Reader, contentType string,
 	return nil
 }
 
-func (f *FileStorage) Download(videoId string, context context.Context) (*s3.GetObjectOutput, error) {
+func (f *FileStorage) Download(videoId uuid.UUID, context context.Context) (*s3.GetObjectOutput, error) {
 	result, err := f.s3Client.GetObject(context, &s3.GetObjectInput{
 		Bucket: aws.String("default"),
 		Key:    aws.String(fmt.Sprintf("%s/original", videoId)),
@@ -55,7 +56,7 @@ func (f *FileStorage) Download(videoId string, context context.Context) (*s3.Get
 	return result, nil
 }
 
-func (f *FileStorage) UploadChunkStream(videoId, chunkStreamName string, body io.Reader, context context.Context) error {
+func (f *FileStorage) UploadChunkStream(videoId uuid.UUID, chunkStreamName string, body io.Reader, context context.Context) error {
 	contentType := "video/iso.segment"
 	_, err := f.s3Client.PutObject(context, &s3.PutObjectInput{
 		Bucket:      aws.String("default"),
@@ -70,7 +71,7 @@ func (f *FileStorage) UploadChunkStream(videoId, chunkStreamName string, body io
 	return nil
 }
 
-func (f *FileStorage) ListChunkStreams(videoId string, context context.Context) (*s3.ListObjectsV2Output, error) {
+func (f *FileStorage) ListChunkStreams(videoId uuid.UUID, context context.Context) (*s3.ListObjectsV2Output, error) {
 	response, err := f.s3Client.ListObjectsV2(context, &s3.ListObjectsV2Input{
 		Bucket: aws.String("default"),
 		Prefix: aws.String(fmt.Sprintf("%s/chunks", videoId)),
@@ -82,7 +83,7 @@ func (f *FileStorage) ListChunkStreams(videoId string, context context.Context) 
 	return response, nil
 }
 
-func (f *FileStorage) PresignChunkStreams(videoId string, context context.Context) ([]string, error) {
+func (f *FileStorage) PresignChunkStreams(videoId uuid.UUID, context context.Context) ([]string, error) {
 	response, err := f.ListChunkStreams(videoId, context)
 	if err != nil {
 		return nil, errors.Join(err, errors.New(FailedToList))
@@ -103,7 +104,7 @@ func (f *FileStorage) PresignChunkStreams(videoId string, context context.Contex
 	return presignedUrls, nil
 }
 
-func (f *FileStorage) DownloadChunkStream(videoId, chunkStreamName string, context context.Context) (*s3.GetObjectOutput, error) {
+func (f *FileStorage) DownloadChunkStream(videoId uuid.UUID, chunkStreamName string, context context.Context) (*s3.GetObjectOutput, error) {
 	result, err := f.s3Client.GetObject(context, &s3.GetObjectInput{
 		Bucket: aws.String("default"),
 		Key:    aws.String(fmt.Sprintf("%s/chunks/%s", videoId, chunkStreamName)),
@@ -115,7 +116,7 @@ func (f *FileStorage) DownloadChunkStream(videoId, chunkStreamName string, conte
 	return result, nil
 }
 
-func (f *FileStorage) UploadInitStream(videoId, initStreamName string, body io.Reader, context context.Context) error {
+func (f *FileStorage) UploadInitStream(videoId uuid.UUID, initStreamName string, body io.Reader, context context.Context) error {
 	contentType := "video/iso.segment"
 	_, err := f.s3Client.PutObject(context, &s3.PutObjectInput{
 		Bucket:      aws.String("default"),
@@ -130,7 +131,7 @@ func (f *FileStorage) UploadInitStream(videoId, initStreamName string, body io.R
 	return nil
 }
 
-func (f *FileStorage) ListInitStreams(videoId string, context context.Context) (*s3.ListObjectsV2Output, error) {
+func (f *FileStorage) ListInitStreams(videoId uuid.UUID, context context.Context) (*s3.ListObjectsV2Output, error) {
 	response, err := f.s3Client.ListObjectsV2(context, &s3.ListObjectsV2Input{
 		Bucket: aws.String("default"),
 		Prefix: aws.String(fmt.Sprintf("%s/init", videoId)),
@@ -142,7 +143,7 @@ func (f *FileStorage) ListInitStreams(videoId string, context context.Context) (
 	return response, nil
 }
 
-func (f *FileStorage) PresignInitStreams(videoId string, context context.Context) ([]string, error) {
+func (f *FileStorage) PresignInitStreams(videoId uuid.UUID, context context.Context) ([]string, error) {
 	response, err := f.ListInitStreams(videoId, context)
 	if err != nil {
 		return nil, errors.Join(err, errors.New(FailedToList))
@@ -163,7 +164,7 @@ func (f *FileStorage) PresignInitStreams(videoId string, context context.Context
 	return presignedUrls, nil
 }
 
-func (f *FileStorage) DownloadInitStream(videoId, initStreamName string, context context.Context) (*s3.GetObjectOutput, error) {
+func (f *FileStorage) DownloadInitStream(videoId uuid.UUID, initStreamName string, context context.Context) (*s3.GetObjectOutput, error) {
 	result, err := f.s3Client.GetObject(context, &s3.GetObjectInput{
 		Bucket: aws.String("default"),
 		Key:    aws.String(fmt.Sprintf("%s/init/%s", videoId, initStreamName)),
@@ -175,7 +176,7 @@ func (f *FileStorage) DownloadInitStream(videoId, initStreamName string, context
 	return result, nil
 }
 
-func (f *FileStorage) UploadManifest(videoId string, body io.Reader, context context.Context) error {
+func (f *FileStorage) UploadManifest(videoId uuid.UUID, body io.Reader, context context.Context) error {
 	contentType := "application/dash+xml"
 	_, err := f.s3Client.PutObject(context, &s3.PutObjectInput{
 		Bucket:      aws.String("default"),
@@ -190,7 +191,7 @@ func (f *FileStorage) UploadManifest(videoId string, body io.Reader, context con
 	return nil
 }
 
-func (f *FileStorage) DownloadManifest(videoId string, context context.Context) (*mpd.MPD, error) {
+func (f *FileStorage) DownloadManifest(videoId uuid.UUID, context context.Context) (*mpd.MPD, error) {
 	response, err := f.s3Client.GetObject(context, &s3.GetObjectInput{
 		Bucket: aws.String("default"),
 		Key:    aws.String(fmt.Sprintf("%s/manifest", videoId)),

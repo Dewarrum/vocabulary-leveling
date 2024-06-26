@@ -39,7 +39,7 @@ func NewExporter(dependencies *app.Dependencies, context context.Context) (*Expo
 
 	return &Exporter{
 		MessageQueue:          messageQueue,
-		SubtitleCueRepository: newSubtitleCueRepository(dependencies.Postgres, dependencies.Logger),
+		SubtitleCueRepository: NewSubtitleCueRepository(dependencies.Postgres, dependencies.Logger),
 		FileStorage:           NewFileStorage(dependencies.S3Client, dependencies.S3PresignClient),
 		FullTextSearch:        fullTextSearch,
 		Logger:                dependencies.Logger,
