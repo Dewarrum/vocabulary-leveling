@@ -2,6 +2,7 @@ package subtitles
 
 import (
 	"context"
+	"dewarrum/vocabulary-leveling/internal/app"
 	"errors"
 	"time"
 
@@ -119,9 +120,10 @@ func (r *SubtitleCueRepository) GetById(id uuid.UUID, ctx context.Context) (*DbS
 	return &subtitleCue, nil
 }
 
-func NewSubtitleCueRepository(db *sqlx.DB, logger zerolog.Logger) *SubtitleCueRepository {
+func NewSubtitleCueRepository(dependencies *app.Dependencies) *SubtitleCueRepository {
 	return &SubtitleCueRepository{
-		db:     db,
-		logger: logger,
+		db:     dependencies.Postgres,
+		logger: dependencies.Logger,
+		tracer: dependencies.Tracer,
 	}
 }

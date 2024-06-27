@@ -56,19 +56,20 @@ func (f *FileStorage) Download(videoId uuid.UUID, context context.Context) (*s3.
 	return result, nil
 }
 
-func (f *FileStorage) UploadChunkStream(videoId uuid.UUID, chunkStreamName string, body io.Reader, context context.Context) error {
+func (f *FileStorage) UploadChunkStream(videoId uuid.UUID, representationId string, chunkStreamName string, body io.Reader, context context.Context) (string, error) {
 	contentType := "video/iso.segment"
+	key := fmt.Sprintf("%s/chunks/%s/%s", videoId, representationId, chunkStreamName)
 	_, err := f.s3Client.PutObject(context, &s3.PutObjectInput{
 		Bucket:      aws.String("default"),
-		Key:         aws.String(fmt.Sprintf("%s/chunks/%s", videoId, chunkStreamName)),
+		Key:         aws.String(key),
 		Body:        body,
 		ContentType: &contentType,
 	})
 	if err != nil {
-		return errors.Join(err, errors.New(FailedToUpload))
+		return "", errors.Join(err, errors.New(FailedToUpload))
 	}
 
-	return nil
+	return key, nil
 }
 
 func (f *FileStorage) ListChunkStreams(videoId uuid.UUID, context context.Context) (*s3.ListObjectsV2Output, error) {
@@ -116,19 +117,20 @@ func (f *FileStorage) DownloadChunkStream(videoId uuid.UUID, chunkStreamName str
 	return result, nil
 }
 
-func (f *FileStorage) UploadInitStream(videoId uuid.UUID, initStreamName string, body io.Reader, context context.Context) error {
+func (f *FileStorage) UploadInitStream(videoId uuid.UUID, representationId string, initStreamName string, body io.Reader, ctx context.Context) (string, error) {
 	contentType := "video/iso.segment"
-	_, err := f.s3Client.PutObject(context, &s3.PutObjectInput{
+	key := fmt.Sprintf("%s/inits/%s/%s", videoId, representationId, initStreamName)
+	_, err := f.s3Client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String("default"),
-		Key:         aws.String(fmt.Sprintf("%s/init/%s", videoId, initStreamName)),
+		Key:         aws.String(key),
 		Body:        body,
 		ContentType: &contentType,
 	})
 	if err != nil {
-		return errors.Join(err, errors.New(FailedToUpload))
+		return "", errors.Join(err, errors.New(FailedToUpload))
 	}
 
-	return nil
+	return key, nil
 }
 
 func (f *FileStorage) ListInitStreams(videoId uuid.UUID, context context.Context) (*s3.ListObjectsV2Output, error) {
@@ -206,4 +208,16 @@ func (f *FileStorage) DownloadManifest(videoId uuid.UUID, context context.Contex
 	}
 
 	return mpd.Parse(responseBody)
+}
+
+func (f *FileStorage) PresignObject(key string, ctx context.Context) (string, error) {
+	presignedUrl, err := f.s3PresignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String("default"),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return "", errors.Join(err, errors.New("failed to presign object"))
+	}
+
+	return presignedUrl.URL, nil
 }

@@ -3,12 +3,42 @@ package mpd
 import "encoding/xml"
 
 type MPD struct {
-	XMLNS                     string    `xml:"xmlns,attr"`
-	Type                      string    `xml:"type,attr"`
-	MediaPresentationDuration string    `xml:"mediaPresentationDuration,attr"`
-	MinBufferTime             string    `xml:"minBufferTime,attr"`
-	Profiles                  string    `xml:"profiles,attr"`
-	Periods                   []*Period `xml:"Period"`
+	XMLNS                     string    `xml:"xmlns,attr" json:"xmlns,omitempty"`
+	Type                      string    `xml:"type,attr" json:"type,omitempty"`
+	MediaPresentationDuration string    `xml:"mediaPresentationDuration,attr" json:"mediaPresentationDuration,omitempty"`
+	MinBufferTime             string    `xml:"minBufferTime,attr" json:"minBufferTime,omitempty"`
+	Profiles                  string    `xml:"profiles,attr" json:"profiles,omitempty"`
+	Periods                   []*Period `xml:"Period" json:"periods,omitempty"`
+}
+
+func (m *MPD) GetRepresentation(representationId string) *Representation {
+	if len(m.Periods) < 1 {
+		return nil
+	}
+	period := m.Periods[0]
+
+	if len(period.AdaptationSets) < 1 {
+		return nil
+	}
+
+	var adaptationSet *AdaptationSet
+	for _, as := range period.AdaptationSets {
+		if as.Id == representationId {
+			adaptationSet = as
+		}
+	}
+
+	if adaptationSet == nil {
+		return nil
+	}
+
+	for _, representation := range adaptationSet.Representations {
+		if representation.ID == representationId {
+			return representation
+		}
+	}
+
+	return nil
 }
 
 func Parse(b []byte) (*MPD, error) {

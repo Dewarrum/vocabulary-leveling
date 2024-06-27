@@ -9,7 +9,7 @@ import (
 
 func MapEndpoints(app fiber.Router, dependencies *app.Dependencies, ctx context.Context) error {
 	fileStorage := NewFileStorage(dependencies.S3Client, dependencies.S3PresignClient)
-	subtitleCueRepository := NewSubtitleCueRepository(dependencies.Postgres, dependencies.Logger)
+	subtitleCueRepository := NewSubtitleCueRepository(dependencies)
 	fullTextSearch, err := NewFullTextSearch(dependencies.ElasticsearchClient, ctx)
 	if err != nil {
 		return err

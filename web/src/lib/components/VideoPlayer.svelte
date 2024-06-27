@@ -27,7 +27,7 @@
 
 		if (player) {
 			player.src(
-				'http://localhost:3000/api/videos/manifest.mpd?videoId=82a926c9-1b5e-4d6a-8e09-1e92bfe38bab'
+				'http://localhost:3000/api/videos/manifest.mpd?subtitleCueId=7f8d9ef9-91b0-4fb9-95f7-9a39c3bc51dc'
 				// '/video.mpd'
 			);
 			player.controls(true);

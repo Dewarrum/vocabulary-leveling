@@ -15,7 +15,7 @@ type DbManifest struct {
 }
 
 func NewDbManifest(videoId uuid.UUID, m *mpd.MPD) (*DbManifest, error) {
-	metaJson, err := json.Marshal(NewDbManifestMeta(m))
+	metaJson, err := json.Marshal(m)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ type DbManifestMeta struct {
 	Periods            []*DbPeriod `json:"periods"`
 }
 
-func NewDbManifestMeta(m *mpd.MPD) *DbManifestMeta {
+func newDbManifestMeta(m *mpd.MPD) *DbManifestMeta {
 	return &DbManifestMeta{
 		Profiles:           m.Profiles,
 		Type:               m.Type,

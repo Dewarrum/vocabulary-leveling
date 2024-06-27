@@ -8,3 +8,4 @@
 go.work
 tmp
 .env.secret
+.DS_Store

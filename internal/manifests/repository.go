@@ -5,6 +5,7 @@ import (
 	"dewarrum/vocabulary-leveling/internal/app"
 	"errors"
 
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 	"github.com/rs/zerolog"
@@ -13,6 +14,7 @@ import (
 
 var (
 	ErrManifestAlreadyExists = errors.New("manifest already exists")
+	ErrFailedToGetManifest   = errors.New("failed to get manifest")
 )
 
 type ManifestsRepository struct {
@@ -21,7 +23,7 @@ type ManifestsRepository struct {
 	tracer trace.Tracer
 }
 
-func NewManifestRepository(dependencies *app.Dependencies) *ManifestsRepository {
+func NewManifestsRepository(dependencies *app.Dependencies) *ManifestsRepository {
 	return &ManifestsRepository{
 		db:     dependencies.Postgres,
 		logger: dependencies.Logger,
@@ -43,4 +45,18 @@ func (r *ManifestsRepository) Insert(manifest *DbManifest, ctx context.Context) 
 	}
 
 	return nil, err
+}
+
+func (r *ManifestsRepository) GetByVideoId(videoId uuid.UUID, ctx context.Context) (*DbManifest, error) {
+	ctx, span := r.tracer.Start(ctx, "manifests.repository.getByVideoId")
+	defer span.End()
+	r.logger.Debug().Str("videoId", videoId.String()).Msg("Searching manifest by video id")
+
+	var manifest DbManifest
+	err := r.db.GetContext(ctx, &manifest, "SELECT * FROM manifests WHERE video_id = $1 LIMIT 1", videoId)
+	if err != nil {
+		return nil, errors.Join(err, ErrFailedToGetManifest)
+	}
+
+	return &manifest, nil
 }
