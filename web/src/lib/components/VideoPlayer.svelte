@@ -1,6 +1,11 @@
 <script lang="ts">
+	import { PUBLIC_API } from '$env/static/public';
 	import videojs from 'video.js';
 	import 'video.js/dist/video-js.css';
+
+	export let subtitleId;
+	export let width: number | string | undefined = undefined;
+	export let height: number | string | undefined = undefined;
 
 	let videoRef: HTMLDivElement;
 	const videoElement = document.createElement('video-js');
@@ -26,11 +31,10 @@
 		}
 
 		if (player) {
-			player.src(
-				'http://localhost:3000/api/videos/manifest.mpd?subtitleCueId=7f8d9ef9-91b0-4fb9-95f7-9a39c3bc51dc'
-				// '/video.mpd'
-			);
+			player.src(`${PUBLIC_API}/api/videos/manifest.mpd?subtitleCueId=${subtitleId}`);
 			player.controls(true);
+			player.width(width);
+			player.height(height);
 		}
 	}
 </script>

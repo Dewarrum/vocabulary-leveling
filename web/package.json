@@ -27,7 +27,6 @@
 		"eslint-plugin-svelte": "^2.36.0",
 		"flowbite": "^2.3.0",
 		"flowbite-svelte": "^0.46.4",
-		"flowbite-svelte-icons": "^1.6.1",
 		"globals": "^15.0.0",
 		"postcss": "^8.4.38",
 		"prettier": "^3.1.1",
@@ -43,6 +42,7 @@
 	},
 	"type": "module",
 	"dependencies": {
+		"@tanstack/svelte-query": "^5.49.0",
 		"dashjs": "^4.7.4",
 		"video.js": "^8.12.0",
 		"videojs-contrib-dash": "^5.1.1"
