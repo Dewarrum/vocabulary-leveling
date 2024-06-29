@@ -24,7 +24,7 @@ const (
 )
 
 type ExportSubtitlesMessage struct {
-	VideoId uuid.UUID `json:"video_id"`
+	VideoId uuid.UUID `json:"videoId"`
 }
 
 func NewExportSubtitlesMessage(videoId uuid.UUID) *ExportSubtitlesMessage {

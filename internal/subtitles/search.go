@@ -6,16 +6,16 @@ import (
 )
 
 type DtoSubtitleCue struct {
-	Id       uuid.UUID `json:"cue_id"`
-	VideoId  uuid.UUID `json:"video_id"`
+	Id       uuid.UUID `json:"cueId"`
+	VideoId  uuid.UUID `json:"videoId"`
 	Sequence int       `json:"sequence"`
-	StartMs  int64     `json:"start_ms"`
-	EndMs    int64     `json:"end_ms"`
+	StartMs  int64     `json:"startMs"`
+	EndMs    int64     `json:"endMs"`
 	Text     string    `json:"text"`
 }
 
 func search(router fiber.Router, fullTextSearch *FullTextSearch, subtitleCueRepository *SubtitleCueRepository) {
-	router.Post("/search", func(c *fiber.Ctx) error {
+	router.Get("/search", func(c *fiber.Ctx) error {
 		query := c.Query("query")
 		if query == "" {
 			return c.Status(400).JSON(map[string]string{"error": "query is required"})
