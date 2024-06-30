@@ -2,6 +2,7 @@ package subtitles
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 
@@ -57,9 +58,14 @@ func NewFullTextSearch(elasticsearchClient *elasticsearch.TypedClient, context c
 }
 
 func (f *FullTextSearch) Insert(subtitle *FtsSubtitle, context context.Context) error {
+	f.logger.Debug().Str("videoId", subtitle.VideoId.String()).Int32("sequence", int32(subtitle.Sequence)).Msg("Inserting subtitle into full text search")
+
 	_, err := f.elasticsearchClient.Index(indexName).
+		Id(base64.StdEncoding.EncodeToString([]byte(subtitle.Id))).
 		Request(subtitle).
 		Do(context)
+
+	f.logger.Debug().Str("videoId", subtitle.VideoId.String()).Int32("sequence", int32(subtitle.Sequence)).Msg("Inserted subtitle into full text search")
 
 	if err == nil {
 		return nil
