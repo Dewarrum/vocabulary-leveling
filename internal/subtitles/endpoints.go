@@ -9,7 +9,7 @@ import (
 
 func MapEndpoints(app fiber.Router, dependencies *app.Dependencies, ctx context.Context) error {
 	fileStorage := NewFileStorage(dependencies.S3Client, dependencies.S3PresignClient)
-	subtitleCueRepository := NewSubtitleCueRepository(dependencies)
+	subtitlesRepository := NewSubtitlesRepository(dependencies)
 	fullTextSearch, err := NewFullTextSearch(dependencies.ElasticsearchClient, ctx)
 	if err != nil {
 		return err
@@ -22,7 +22,7 @@ func MapEndpoints(app fiber.Router, dependencies *app.Dependencies, ctx context.
 	group := app.Group("/subtitles")
 	upload(group, fileStorage)
 	export(group, messageQueue, dependencies.Tracer)
-	search(group, fullTextSearch, subtitleCueRepository)
+	search(group, fullTextSearch, subtitlesRepository)
 
 	return nil
 }

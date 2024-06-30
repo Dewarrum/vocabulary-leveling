@@ -19,12 +19,12 @@ var (
 )
 
 type Exporter struct {
-	MessageQueue          *MessageQueue
-	SubtitleCueRepository *SubtitleCueRepository
-	FileStorage           *FileStorage
-	FullTextSearch        *FullTextSearch
-	Logger                zerolog.Logger
-	Tracer                trace.Tracer
+	MessageQueue        *MessageQueue
+	SubtitlesRepository *SubtitlesRepository
+	FileStorage         *FileStorage
+	FullTextSearch      *FullTextSearch
+	Logger              zerolog.Logger
+	Tracer              trace.Tracer
 }
 
 func NewExporter(dependencies *app.Dependencies, context context.Context) (*Exporter, error) {
@@ -38,12 +38,12 @@ func NewExporter(dependencies *app.Dependencies, context context.Context) (*Expo
 	}
 
 	return &Exporter{
-		MessageQueue:          messageQueue,
-		SubtitleCueRepository: NewSubtitleCueRepository(dependencies),
-		FileStorage:           NewFileStorage(dependencies.S3Client, dependencies.S3PresignClient),
-		FullTextSearch:        fullTextSearch,
-		Logger:                dependencies.Logger,
-		Tracer:                dependencies.Tracer,
+		MessageQueue:        messageQueue,
+		SubtitlesRepository: NewSubtitlesRepository(dependencies),
+		FileStorage:         NewFileStorage(dependencies.S3Client, dependencies.S3PresignClient),
+		FullTextSearch:      fullTextSearch,
+		Logger:              dependencies.Logger,
+		Tracer:              dependencies.Tracer,
 	}, nil
 }
 
@@ -82,12 +82,12 @@ func (e *Exporter) handleMessage(message ExportSubtitlesMessage, ctx context.Con
 	}
 
 	for _, caption := range subtitle.Captions {
-		dbSubtitleCue, err := e.saveToDatabase(message.VideoId, caption, ctx)
+		dbSubtitle, err := e.saveToDatabase(message.VideoId, caption, ctx)
 		if err != nil {
 			return err
 		}
 
-		err = e.saveToFullTextSearch(dbSubtitleCue.Id, dbSubtitleCue.VideoId, caption, ctx)
+		err = e.saveToFullTextSearch(dbSubtitle.Id, dbSubtitle.VideoId, caption, ctx)
 		if err != nil {
 			return err
 		}
@@ -96,11 +96,11 @@ func (e *Exporter) handleMessage(message ExportSubtitlesMessage, ctx context.Con
 	return nil
 }
 
-func (e *Exporter) saveToDatabase(videoId uuid.UUID, caption subtitles.Caption, context context.Context) (*DbSubtitleCue, error) {
+func (e *Exporter) saveToDatabase(videoId uuid.UUID, caption subtitles.Caption, context context.Context) (*DbSubtitle, error) {
 	emptyDate := (time.Time{}).AddDate(-1, 0, 0)
-	subtitleCue := newDbSubtitleCue(videoId, strings.Join(caption.Text, "\n"), caption.Seq, caption.Start.Sub(emptyDate).Milliseconds(), caption.End.Sub(emptyDate).Milliseconds())
+	subtitle := newDbSubtitle(videoId, strings.Join(caption.Text, "\n"), caption.Seq, caption.Start.Sub(emptyDate).Milliseconds(), caption.End.Sub(emptyDate).Milliseconds())
 
-	inserted, err := e.SubtitleCueRepository.Insert(subtitleCue, context)
+	inserted, err := e.SubtitlesRepository.Insert(subtitle, context)
 	if err != nil {
 		return nil, err
 	}
@@ -108,9 +108,9 @@ func (e *Exporter) saveToDatabase(videoId uuid.UUID, caption subtitles.Caption, 
 	return inserted, nil
 }
 
-func (e *Exporter) saveToFullTextSearch(id, videoId uuid.UUID, caption subtitles.Caption, context context.Context) error {
-	subtitleCue := NewFtsSubtitleCue(id, videoId, caption.Seq, strings.Join(caption.Text, "\n"))
-	err := e.FullTextSearch.Insert(subtitleCue, context)
+func (e *Exporter) saveToFullTextSearch(id string, videoId uuid.UUID, caption subtitles.Caption, context context.Context) error {
+	subtitle := NewFtsSubtitle(id, videoId, caption.Seq, strings.Join(caption.Text, "\n"))
+	err := e.FullTextSearch.Insert(subtitle, context)
 	if err != nil {
 		return err
 	}

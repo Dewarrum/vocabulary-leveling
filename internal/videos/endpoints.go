@@ -20,7 +20,7 @@ func MapEndpoints(app fiber.Router, dependencies *app.Dependencies) error {
 	group := app.Group("/videos")
 	export(group, messageQueue)
 	upload(group, fileStorage)
-	manifest(group, fileStorage, subtitles.NewSubtitleCueRepository(dependencies), manifests.NewManifestsRepository(dependencies), inits.NewInitsRepository(dependencies), chunks.NewChunksRepository(dependencies), dependencies.Logger)
+	manifest(group, fileStorage, subtitles.NewSubtitlesRepository(dependencies), manifests.NewManifestsRepository(dependencies), inits.NewInitsRepository(dependencies), chunks.NewChunksRepository(dependencies), dependencies.Logger)
 
 	return nil
 }

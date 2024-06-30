@@ -11,6 +11,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -32,19 +34,25 @@ func insertPresignedInitStream(segmentList *mpd.SegmentList, presignedUrl string
 	segmentList.Initialization.SourceURL = presignedUrl
 }
 
-func manifest(router fiber.Router, fileStorage *FileStorage, subtitleCueRepository *subtitles.SubtitleCueRepository, manifestsRepository *manifests.ManifestsRepository, initsRepository *inits.InitsRepository, chunksRepository *chunks.ChunksRepository, logger zerolog.Logger) {
+func manifest(router fiber.Router, fileStorage *FileStorage, subtitleRepository *subtitles.SubtitlesRepository, manifestsRepository *manifests.ManifestsRepository, initsRepository *inits.InitsRepository, chunksRepository *chunks.ChunksRepository, logger zerolog.Logger) {
 	router.Get("/manifest.mpd", func(c *fiber.Ctx) error {
-		subtitleCueId, err := uuid.Parse(c.Query("subtitleCueId"))
+		subtitleIdParts := strings.Split(c.Query("subtitleId"), "/")
+		if len(subtitleIdParts) != 2 {
+			return c.Status(http.StatusBadRequest).JSON(map[string]string{"error": "subtitleId is invalid"})
+		}
+		videoId, err := uuid.Parse(subtitleIdParts[0])
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(map[string]string{"error": err.Error()})
+		}
+		sequence, err := strconv.Atoi(subtitleIdParts[1])
 		if err != nil {
 			return c.Status(http.StatusBadRequest).JSON(map[string]string{"error": err.Error()})
 		}
 
-		subtitle, err := subtitleCueRepository.GetById(subtitleCueId, c.Context())
+		subtitles, err := subtitleRepository.GetRange(videoId, sequence-1, sequence+1, c.Context())
 		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 		}
-
-		videoId := subtitle.VideoId
 
 		dbManifest, err := manifestsRepository.GetByVideoId(videoId, c.Context())
 		if err != nil {
@@ -75,7 +83,7 @@ func manifest(router fiber.Router, fileStorage *FileStorage, subtitleCueReposito
 			presignedInitStreams[i] = presignedInit
 		}
 
-		dbChunks, err := chunksRepository.GetMany(videoId, subtitle.StartMs-2000, subtitle.EndMs+2000, c.Context())
+		dbChunks, err := chunksRepository.GetMany(videoId, subtitles[0].StartMs-2000, subtitles[len(subtitles)-1].EndMs+2000, c.Context())
 		if err != nil {
 			c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 			return err

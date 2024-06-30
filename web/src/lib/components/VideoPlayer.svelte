@@ -31,7 +31,7 @@
 		}
 
 		if (player) {
-			player.src(`${PUBLIC_API}/api/videos/manifest.mpd?subtitleCueId=${subtitleId}`);
+			player.src(`${PUBLIC_API}/api/videos/manifest.mpd?subtitleId=${subtitleId}`);
 			player.controls(true);
 			player.width(width);
 			player.height(height);

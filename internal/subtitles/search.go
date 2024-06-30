@@ -5,8 +5,8 @@ import (
 	"github.com/google/uuid"
 )
 
-type DtoSubtitleCue struct {
-	Id       uuid.UUID `json:"cueId"`
+type DtoSubtitle struct {
+	Id       string    `json:"id"`
 	VideoId  uuid.UUID `json:"videoId"`
 	Sequence int       `json:"sequence"`
 	StartMs  int64     `json:"startMs"`
@@ -14,44 +14,48 @@ type DtoSubtitleCue struct {
 	Text     string    `json:"text"`
 }
 
-func search(router fiber.Router, fullTextSearch *FullTextSearch, subtitleCueRepository *SubtitleCueRepository) {
+func newDtoSubtitle(subtitle *DbSubtitle) *DtoSubtitle {
+	return &DtoSubtitle{
+		Id:       subtitle.Id,
+		VideoId:  subtitle.VideoId,
+		Sequence: subtitle.Sequence,
+		StartMs:  subtitle.StartMs,
+		EndMs:    subtitle.EndMs,
+		Text:     subtitle.Text,
+	}
+}
+
+func search(router fiber.Router, fullTextSearch *FullTextSearch, subtitleRepository *SubtitlesRepository) {
 	router.Get("/search", func(c *fiber.Ctx) error {
 		query := c.Query("query")
 		if query == "" {
 			return c.Status(400).JSON(map[string]string{"error": "query is required"})
 		}
 
-		ftsSubtitleCues, err := fullTextSearch.Search(query, c.Context())
+		ftsSubtitles, err := fullTextSearch.Search(query, c.Context())
 		if err != nil {
 			return c.Status(500).JSON(map[string]string{"error": err.Error()})
 		}
 
-		if len(ftsSubtitleCues) == 0 {
-			return c.Status(200).JSON([]*DtoSubtitleCue{})
+		if len(ftsSubtitles) == 0 {
+			return c.Status(200).JSON([]*DtoSubtitle{})
 		}
 
-		subtitleCueIds := make([]uuid.UUID, len(ftsSubtitleCues))
-		for i, ftsSubtitleCue := range ftsSubtitleCues {
-			subtitleCueIds[i] = ftsSubtitleCue.Id
+		subtitleIds := make([]string, len(ftsSubtitles))
+		for i, ftsSubtitle := range ftsSubtitles {
+			subtitleIds[i] = ftsSubtitle.Id
 		}
 
-		dbSubtitleCues, err := subtitleCueRepository.GetManyByIds(subtitleCueIds, c.Context())
+		dbSubtitles, err := subtitleRepository.GetManyByIds(subtitleIds, c.Context())
 		if err != nil {
 			return c.Status(500).JSON(map[string]string{"error": err.Error()})
 		}
 
-		dtoSubtitleCues := make([]*DtoSubtitleCue, len(dbSubtitleCues))
-		for i, dbSubtitleCue := range dbSubtitleCues {
-			dtoSubtitleCues[i] = &DtoSubtitleCue{
-				Id:       dbSubtitleCue.Id,
-				VideoId:  dbSubtitleCue.VideoId,
-				Sequence: dbSubtitleCue.Sequence,
-				StartMs:  dbSubtitleCue.StartMs,
-				EndMs:    dbSubtitleCue.EndMs,
-				Text:     dbSubtitleCue.Text,
-			}
+		dtoSubtitles := make([]*DtoSubtitle, len(dbSubtitles))
+		for i, dbSubtitle := range dbSubtitles {
+			dtoSubtitles[i] = newDtoSubtitle(dbSubtitle)
 		}
 
-		return c.Status(200).JSON(dtoSubtitleCues)
+		return c.Status(200).JSON(dtoSubtitles)
 	})
 }

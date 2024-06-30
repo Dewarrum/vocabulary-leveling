@@ -1,7 +1,7 @@
 import { PUBLIC_API } from "$env/static/public";
 
 export type Subtitle = {
-    cueId: string;
+    id: string;
     videoId: string;
     sequence: number;
     startMs: number;

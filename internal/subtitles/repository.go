@@ -4,6 +4,7 @@ import (
 	"context"
 	"dewarrum/vocabulary-leveling/internal/app"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,13 +14,13 @@ import (
 )
 
 var (
-	ErrSubtitleCueInsertFailed = errors.New("failed to insert subtitle cue")
+	ErrFailedToInsertSubtitle  = errors.New("failed to insert subtitle")
 	ErrFailedToGetAffectedRows = errors.New("failed to get affected rows")
-	ErrFailedToGetSubtitleCue  = errors.New("failed to get subtitle cue")
+	ErrFailedToGetSubtitle     = errors.New("failed to get subtitle")
 )
 
-type DbSubtitleCue struct {
-	Id        uuid.UUID `db:"id"`
+type DbSubtitle struct {
+	Id        string    `db:"id"`
 	VideoId   uuid.UUID `db:"video_id"`
 	Sequence  int       `db:"sequence"`
 	StartMs   int64     `db:"start_ms"`
@@ -28,9 +29,9 @@ type DbSubtitleCue struct {
 	CreatedAt time.Time `db:"created_at"`
 }
 
-func newDbSubtitleCue(videoId uuid.UUID, text string, sequence int, startMs int64, endMs int64) *DbSubtitleCue {
-	return &DbSubtitleCue{
-		Id:        uuid.New(),
+func newDbSubtitle(videoId uuid.UUID, text string, sequence int, startMs int64, endMs int64) *DbSubtitle {
+	return &DbSubtitle{
+		Id:        fmt.Sprintf("%s/%d", videoId, sequence),
 		VideoId:   videoId,
 		Sequence:  sequence,
 		StartMs:   startMs,
@@ -40,18 +41,18 @@ func newDbSubtitleCue(videoId uuid.UUID, text string, sequence int, startMs int6
 	}
 }
 
-type SubtitleCueRepository struct {
+type SubtitlesRepository struct {
 	db     *sqlx.DB
 	logger zerolog.Logger
 	tracer trace.Tracer
 }
 
-func (r *SubtitleCueRepository) Insert(subtitleCue *DbSubtitleCue, context context.Context) (*DbSubtitleCue, error) {
-	r.logger.Debug().Str("videoId", subtitleCue.VideoId.String()).Int32("sequence", int32(subtitleCue.Sequence)).Msg("Inserting subtitle cue")
+func (r *SubtitlesRepository) Insert(subtitle *DbSubtitle, context context.Context) (*DbSubtitle, error) {
+	r.logger.Debug().Str("videoId", subtitle.VideoId.String()).Int32("sequence", int32(subtitle.Sequence)).Msg("Inserting subtitle")
 
-	result, err := r.db.NamedExecContext(context, "INSERT INTO subtitle_cues (id, video_id, sequence, start_ms, end_ms, text, created_at) VALUES (:id,:video_id, :sequence, :start_ms, :end_ms, :text, :created_at) ON CONFLICT (video_id, sequence) DO NOTHING", subtitleCue)
+	result, err := r.db.NamedExecContext(context, "INSERT INTO subtitles (id, video_id, sequence, start_ms, end_ms, text, created_at) VALUES (:id,:video_id, :sequence, :start_ms, :end_ms, :text, :created_at) ON CONFLICT (video_id, sequence) DO NOTHING", subtitle)
 	if err != nil {
-		return nil, errors.Join(err, ErrSubtitleCueInsertFailed)
+		return nil, errors.Join(err, ErrFailedToInsertSubtitle)
 	}
 
 	affected, err := result.RowsAffected()
@@ -60,28 +61,28 @@ func (r *SubtitleCueRepository) Insert(subtitleCue *DbSubtitleCue, context conte
 	}
 
 	if affected == 1 {
-		return subtitleCue, nil
+		return subtitle, nil
 	}
 
-	rows, err := r.db.QueryxContext(context, "SELECT * FROM subtitle_cues WHERE video_id = $1 AND sequence = $2", subtitleCue.VideoId, subtitleCue.Sequence)
+	rows, err := r.db.QueryxContext(context, "SELECT * FROM subtitles WHERE video_id = $1 AND sequence = $2", subtitle.VideoId, subtitle.Sequence)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var inserted DbSubtitleCue
+	var inserted DbSubtitle
 	rows.Next()
 	err = rows.StructScan(&inserted)
 	if err != nil {
-		return nil, errors.Join(err, ErrFailedToGetSubtitleCue)
+		return nil, errors.Join(err, ErrFailedToGetSubtitle)
 	}
 	return &inserted, nil
 }
 
-func (r *SubtitleCueRepository) GetManyByIds(ids []uuid.UUID, context context.Context) ([]*DbSubtitleCue, error) {
-	r.logger.Debug().Msg("Searching subtitle cues by ids")
+func (r *SubtitlesRepository) GetManyByIds(ids []string, context context.Context) ([]*DbSubtitle, error) {
+	r.logger.Debug().Msg("Searching subtitles by ids")
 
-	query, args, err := sqlx.In("SELECT id, video_id, sequence, start_ms, end_ms, text, created_at FROM subtitle_cues WHERE id IN (?)", ids)
+	query, args, err := sqlx.In("SELECT id, video_id, sequence, start_ms, end_ms, text, created_at FROM subtitles WHERE id IN (?)", ids)
 	if err != nil {
 		return nil, err
 	}
@@ -93,35 +94,35 @@ func (r *SubtitleCueRepository) GetManyByIds(ids []uuid.UUID, context context.Co
 	}
 	defer rows.Close()
 
-	var subtitleCues []*DbSubtitleCue
+	var subtitles []*DbSubtitle
 	for rows.Next() {
-		var subtitleCue DbSubtitleCue
-		err := rows.StructScan(&subtitleCue)
+		var subtitle DbSubtitle
+		err := rows.StructScan(&subtitle)
 		if err != nil {
 			return nil, err
 		}
-		subtitleCues = append(subtitleCues, &subtitleCue)
+		subtitles = append(subtitles, &subtitle)
 	}
 
-	return subtitleCues, nil
+	return subtitles, nil
 }
 
-func (r *SubtitleCueRepository) GetById(id uuid.UUID, ctx context.Context) (*DbSubtitleCue, error) {
-	ctx, span := r.tracer.Start(ctx, "subtitles.repository.getById")
+func (r *SubtitlesRepository) GetRange(videoId uuid.UUID, fromSequence int, toSequence int, ctx context.Context) ([]*DbSubtitle, error) {
+	ctx, span := r.tracer.Start(ctx, "subtitles.repository.getRange")
 	defer span.End()
-	r.logger.Debug().Str("id", id.String()).Msg("Searching subtitle cue by id")
+	r.logger.Debug().Str("videoId", videoId.String()).Int32("fromSequence", int32(fromSequence)).Int32("toSequence", int32(toSequence)).Msg("Searching subtitles by range")
 
-	var subtitleCue DbSubtitleCue
-	err := sqlx.GetContext(ctx, r.db, &subtitleCue, "SELECT * FROM subtitle_cues WHERE id = $1 LIMIT 1", id)
+	var subtitle []*DbSubtitle
+	err := sqlx.SelectContext(ctx, r.db, &subtitle, "SELECT * FROM subtitles WHERE video_id = $1 AND sequence >= $2 AND sequence <= $3", videoId, fromSequence, toSequence)
 	if err != nil {
-		return nil, errors.Join(err, ErrFailedToGetSubtitleCue)
+		return nil, errors.Join(err, ErrFailedToGetSubtitle)
 	}
 
-	return &subtitleCue, nil
+	return subtitle, nil
 }
 
-func NewSubtitleCueRepository(dependencies *app.Dependencies) *SubtitleCueRepository {
-	return &SubtitleCueRepository{
+func NewSubtitlesRepository(dependencies *app.Dependencies) *SubtitlesRepository {
+	return &SubtitlesRepository{
 		db:     dependencies.Postgres,
 		logger: dependencies.Logger,
 		tracer: dependencies.Tracer,

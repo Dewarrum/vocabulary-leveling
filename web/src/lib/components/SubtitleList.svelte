@@ -17,7 +17,7 @@
 			<div class="flex flex-col">
 				<div class="text-sm font-medium">
 					<h2 class="text-lg">
-						<a href={renderPreviewVideoLink(subtitle.cueId)}>{subtitle.text}</a>
+						<a href={renderPreviewVideoLink(subtitle.id)}>{subtitle.text}</a>
 					</h2>
 				</div>
 			</div>

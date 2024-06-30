@@ -2,10 +2,8 @@ package subtitles
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/indices/create"
@@ -26,15 +24,15 @@ var (
 	analyzer               = "nori"
 )
 
-type FtsSubtitleCue struct {
-	Id       uuid.UUID `json:"cue_id"`
+type FtsSubtitle struct {
+	Id       string    `json:"id"`
 	VideoId  uuid.UUID `json:"video_id"`
 	Sequence int       `json:"sequence"`
 	Text     string    `json:"text"`
 }
 
-func NewFtsSubtitleCue(id, videoId uuid.UUID, sequence int, text string) *FtsSubtitleCue {
-	return &FtsSubtitleCue{
+func NewFtsSubtitle(id string, videoId uuid.UUID, sequence int, text string) *FtsSubtitle {
+	return &FtsSubtitle{
 		Id:       id,
 		VideoId:  videoId,
 		Sequence: sequence,
@@ -58,11 +56,9 @@ func NewFullTextSearch(elasticsearchClient *elasticsearch.TypedClient, context c
 	}, nil
 }
 
-func (f *FullTextSearch) Insert(ftsSubtitleCue *FtsSubtitleCue, context context.Context) error {
-	documentId := fmt.Sprintf("%s/%d", ftsSubtitleCue.VideoId, ftsSubtitleCue.Sequence)
+func (f *FullTextSearch) Insert(subtitle *FtsSubtitle, context context.Context) error {
 	_, err := f.elasticsearchClient.Index(indexName).
-		Id(base64.URLEncoding.EncodeToString([]byte(documentId))).
-		Request(ftsSubtitleCue).
+		Request(subtitle).
 		Do(context)
 
 	if err == nil {
@@ -70,12 +66,12 @@ func (f *FullTextSearch) Insert(ftsSubtitleCue *FtsSubtitleCue, context context.
 	}
 
 	elasticsearchErr := err.(*types.ElasticsearchError)
-	f.logger.Error().Str("videoId", ftsSubtitleCue.VideoId.String()).Int32("sequence", int32(ftsSubtitleCue.Sequence)).Err(elasticsearchErr).Msg("Failed to insert subtitle cue")
+	f.logger.Error().Str("videoId", subtitle.VideoId.String()).Int32("sequence", int32(subtitle.Sequence)).Err(elasticsearchErr).Msg("Failed to insert subtitle")
 
 	return errors.Join(err, ErrFailedToInsert)
 }
 
-func (f *FullTextSearch) Search(queryText string, context context.Context) ([]*FtsSubtitleCue, error) {
+func (f *FullTextSearch) Search(queryText string, context context.Context) ([]*FtsSubtitle, error) {
 	query := types.Query{
 		Match: map[string]types.MatchQuery{
 			"text": {
@@ -93,17 +89,17 @@ func (f *FullTextSearch) Search(queryText string, context context.Context) ([]*F
 		return nil, errors.Join(err, ErrFailedToSearch)
 	}
 
-	var subtitleCues []*FtsSubtitleCue
+	var subtitles []*FtsSubtitle
 	for _, hit := range response.Hits.Hits {
-		subtitleCue := FtsSubtitleCue{}
-		err := json.Unmarshal(hit.Source_, &subtitleCue)
+		subtitle := FtsSubtitle{}
+		err := json.Unmarshal(hit.Source_, &subtitle)
 		if err != nil {
 			return nil, errors.Join(err, ErrFailedToDeserialize)
 		}
-		subtitleCues = append(subtitleCues, &subtitleCue)
+		subtitles = append(subtitles, &subtitle)
 	}
 
-	return subtitleCues, nil
+	return subtitles, nil
 }
 
 func initializeIndex(elasticsearchClient *elasticsearch.TypedClient, context context.Context) error {
@@ -112,9 +108,9 @@ func initializeIndex(elasticsearchClient *elasticsearch.TypedClient, context con
 		Request(&create.Request{
 			Mappings: &types.TypeMapping{
 				Properties: map[string]types.Property{
-					"cue_id":   types.KeywordProperty{},
-					"video_id": types.KeywordProperty{},
-					"sequence": types.KeywordProperty{},
+					"subtitle_id": types.KeywordProperty{},
+					"video_id":    types.KeywordProperty{},
+					"sequence":    types.KeywordProperty{},
 					"text": types.TextProperty{
 						Analyzer: &analyzer,
 					},
