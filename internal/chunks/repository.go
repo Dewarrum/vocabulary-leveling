@@ -72,7 +72,7 @@ func (r *ChunksRepository) Insert(chunk *DbChunk, ctx context.Context) (*DbChunk
 func (r *ChunksRepository) GetMany(videoId uuid.UUID, startMs, endMs int64, ctx context.Context) ([]*DbChunk, error) {
 	ctx, span := r.tracer.Start(ctx, "chunks.repository.getMany")
 	defer span.End()
-	r.logger.Debug().Str("videoId", videoId.String()).Msg("Searching chunks")
+	r.logger.Debug().Str("videoId", videoId.String()).Int64("startMs", startMs).Int64("endMs", endMs).Msg("Searching chunks")
 
 	var chunks []*DbChunk
 	err := r.db.SelectContext(ctx, &chunks, "SELECT * FROM chunks WHERE video_id = $1 AND start_ms >= $2 AND end_ms <= $3", videoId, startMs, endMs)

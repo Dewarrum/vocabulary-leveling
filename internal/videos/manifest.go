@@ -2,20 +2,19 @@ package videos
 
 import (
 	"bytes"
+	"context"
 	"dewarrum/vocabulary-leveling/internal/chunks"
 	"dewarrum/vocabulary-leveling/internal/inits"
 	"dewarrum/vocabulary-leveling/internal/manifests"
 	"dewarrum/vocabulary-leveling/internal/mpd"
 	"dewarrum/vocabulary-leveling/internal/subtitles"
 	"dewarrum/vocabulary-leveling/internal/utils"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 )
 
@@ -30,29 +29,85 @@ func insertPresignedChunkStreams(segmentList *mpd.SegmentList, presignedUrls []s
 	return nil
 }
 
-func insertPresignedInitStream(segmentList *mpd.SegmentList, presignedUrl string) {
-	segmentList.Initialization.SourceURL = presignedUrl
+func presignChunks(chunks []*chunks.DbChunk, fileStorage *FileStorage, ctx context.Context) ([]string, error) {
+	var presignedUrls []string
+	for _, chunk := range chunks {
+		presignedChunk, err := fileStorage.PresignObject(chunk.ContentLocation, ctx)
+		if err != nil {
+			return nil, errors.Join(err, errors.New("failed to presign object"))
+		}
+		presignedUrls = append(presignedUrls, presignedChunk)
+	}
+	return presignedUrls, nil
+}
+
+func ExtendRange(startMs int64, endMs int64, desiredDuration int64) (s int64, e int64) {
+	actualDuration := endMs - startMs
+	if actualDuration >= desiredDuration {
+		return startMs, endMs
+	}
+
+	requiredAddition := desiredDuration - actualDuration
+	halfAddition := requiredAddition / 2
+
+	s = startMs - halfAddition
+	e = endMs + halfAddition
+
+	if s < 0 {
+		e -= s
+		s = 0
+	}
+
+	return s, e
+}
+
+func insertSegmentList(representation *mpd.Representation, chunks []*chunks.DbChunk, init *inits.DbInit, durationMs int64, fileStorage *FileStorage, ctx context.Context) error {
+	presignedVideoChunks, err := presignChunks(chunks, fileStorage, ctx)
+	if err != nil {
+		return err
+	}
+
+	timescale, err := strconv.ParseInt(representation.SegmentTemplate.Timescale, 10, 64)
+	if err != nil {
+		return err
+	}
+
+	representation.SegmentList = &mpd.SegmentList{
+		Timescale:      representation.SegmentTemplate.Timescale,
+		Duration:       fmt.Sprintf("%d", durationMs*timescale/1000),
+		Initialization: &mpd.Initialization{},
+		Segments:       make([]*mpd.Segment, len(chunks)),
+	}
+
+	presignedInit, err := fileStorage.PresignObject(init.ContentLocation, ctx)
+	if err != nil {
+		return err
+	}
+
+	representation.SegmentList.Initialization.SourceURL = presignedInit
+
+	err = insertPresignedChunkStreams(representation.SegmentList, presignedVideoChunks)
+	if err != nil {
+		return err
+	}
+
+	representation.SegmentTemplate = nil
+
+	return nil
 }
 
 func manifest(router fiber.Router, fileStorage *FileStorage, subtitleRepository *subtitles.SubtitlesRepository, manifestsRepository *manifests.ManifestsRepository, initsRepository *inits.InitsRepository, chunksRepository *chunks.ChunksRepository, logger zerolog.Logger) {
 	router.Get("/manifest.mpd", func(c *fiber.Ctx) error {
-		subtitleIdParts := strings.Split(c.Query("subtitleId"), "/")
-		if len(subtitleIdParts) != 2 {
-			return c.Status(http.StatusBadRequest).JSON(map[string]string{"error": "subtitleId is invalid"})
-		}
-		videoId, err := uuid.Parse(subtitleIdParts[0])
-		if err != nil {
-			return c.Status(http.StatusBadRequest).JSON(map[string]string{"error": err.Error()})
-		}
-		sequence, err := strconv.Atoi(subtitleIdParts[1])
-		if err != nil {
-			return c.Status(http.StatusBadRequest).JSON(map[string]string{"error": err.Error()})
+		subtitleId := c.Query("subtitleId")
+		if subtitleId == "" {
+			return c.Status(http.StatusBadRequest).JSON(map[string]string{"error": "subtitleId is required"})
 		}
 
-		subtitles, err := subtitleRepository.GetRange(videoId, sequence-1, sequence+1, c.Context())
+		subtitle, err := subtitleRepository.GetById(subtitleId, c.Context())
 		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 		}
+		videoId := subtitle.VideoId
 
 		dbManifest, err := manifestsRepository.GetByVideoId(videoId, c.Context())
 		if err != nil {
@@ -60,8 +115,7 @@ func manifest(router fiber.Router, fileStorage *FileStorage, subtitleRepository 
 			return err
 		}
 
-		var manifestMeta mpd.MPD
-		err = json.Unmarshal(dbManifest.Meta, &manifestMeta)
+		manifestMeta, err := dbManifest.GetMeta()
 		if err != nil {
 			c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 			return err
@@ -73,91 +127,35 @@ func manifest(router fiber.Router, fileStorage *FileStorage, subtitleRepository 
 			return err
 		}
 
-		presignedInitStreams := make([]string, len(dbInits))
-		for i, init := range dbInits {
-			presignedInit, err := fileStorage.PresignObject(init.ContentLocation, c.Context())
-			if err != nil {
-				c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
-				return err
-			}
-			presignedInitStreams[i] = presignedInit
-		}
-
-		dbChunks, err := chunksRepository.GetMany(videoId, subtitles[0].StartMs-2000, subtitles[len(subtitles)-1].EndMs+2000, c.Context())
+		chunkDuration, err := manifestMeta.GetChunkDuration()
+		logger.Debug().Int64("chunkDuration", chunkDuration).Msg("Chunk duration")
 		if err != nil {
-			c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
-			return err
+			return c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 		}
-		logger.Debug().Any("chunks", dbChunks).Msg("Found chunks")
 
-		dbVideoChunks := utils.Filter(dbChunks, func(chunk *chunks.DbChunk) bool {
-			return chunk.RepresentationId == "0"
-		})
-		presignedVideoChunks := make([]string, len(dbVideoChunks))
-		for i, chunk := range dbVideoChunks {
-			presignedChunk, err := fileStorage.PresignObject(chunk.ContentLocation, c.Context())
-			if err != nil {
-				c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
-				return err
-			}
-			presignedVideoChunks[i] = presignedChunk
-		}
-		videoRepresentation := manifestMeta.GetRepresentation("0")
-		var videoRepresentationDuration int64
-		for _, chunk := range dbVideoChunks {
-			videoRepresentationDuration += chunk.EndMs - chunk.StartMs
-		}
-		videoRepresentation.SegmentList = &mpd.SegmentList{
-			Timescale:      videoRepresentation.SegmentTemplate.Timescale,
-			Duration:       fmt.Sprintf("%d", videoRepresentationDuration),
-			Initialization: &mpd.Initialization{},
-			Segments:       make([]*mpd.Segment, len(dbVideoChunks)),
-		}
-		insertPresignedInitStream(videoRepresentation.SegmentList, presignedInitStreams[0])
-		err = insertPresignedChunkStreams(videoRepresentation.SegmentList, presignedVideoChunks)
+		logger.Debug().Int64("startMs", subtitle.StartMs).Int64("endMs", subtitle.EndMs).Msg("Subtitle range")
+		subtitleDuration := subtitle.EndMs - subtitle.StartMs
+		logger.Debug().Int64("subtitleDuration", subtitleDuration).Msg("Subtitle duration")
+
+		startMs, endMs := ExtendRange(subtitle.StartMs, subtitle.EndMs, max(subtitleDuration, chunkDuration)*2)
+
+		dbChunks, err := chunksRepository.GetMany(videoId, startMs, endMs, c.Context())
 		if err != nil {
-			c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
-			return nil
+			return c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 		}
 
-		dbAudioChunks := utils.Filter(dbChunks, func(chunk *chunks.DbChunk) bool {
-			return chunk.RepresentationId == "1"
-		})
-		presignedAudioChunks := make([]string, len(dbAudioChunks))
-		for i, chunk := range dbAudioChunks {
-			presignedChunk, err := fileStorage.PresignObject(chunk.ContentLocation, c.Context())
-			if err != nil {
-				c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
-				return err
-			}
-			presignedAudioChunks[i] = presignedChunk
-		}
-		audioRepresentation := manifestMeta.GetRepresentation("1")
-		var audioRepresentationDuration int64
-		for _, chunk := range dbAudioChunks {
-			audioRepresentationDuration += chunk.EndMs - chunk.StartMs
-		}
-		audioRepresentation.SegmentList = &mpd.SegmentList{
-			Timescale:      audioRepresentation.SegmentTemplate.Timescale,
-			Duration:       fmt.Sprintf("%d", audioRepresentationDuration),
-			Initialization: &mpd.Initialization{},
-			Segments:       make([]*mpd.Segment, len(dbAudioChunks)),
-		}
-		insertPresignedInitStream(audioRepresentation.SegmentList, presignedInitStreams[1])
-		err = insertPresignedChunkStreams(audioRepresentation.SegmentList, presignedAudioChunks)
-		if err != nil {
-			c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
-			return nil
-		}
+		dbVideoChunks := utils.Filter(dbChunks, func(chunk *chunks.DbChunk) bool { return chunk.RepresentationId == "0" })
+		dbAudioChunks := utils.Filter(dbChunks, func(chunk *chunks.DbChunk) bool { return chunk.RepresentationId == "1" })
 
-		videoRepresentation.SegmentTemplate = nil
-		audioRepresentation.SegmentTemplate = nil
+		insertSegmentList(manifestMeta.GetRepresentation("0"), dbVideoChunks, dbInits[0], 1, fileStorage, c.Context())
+		insertSegmentList(manifestMeta.GetRepresentation("1"), dbAudioChunks, dbInits[1], 1, fileStorage, c.Context())
+
 		c.Set("Content-Type", "application/dash+xml")
 		serialized, err := manifestMeta.Serialize()
 		if err != nil {
-			c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
-			return nil
+			return c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 		}
+
 		serialized = bytes.Replace(serialized, []byte("&amp;"), []byte("&"), -1)
 		return c.Status(http.StatusOK).Send(serialized)
 	})

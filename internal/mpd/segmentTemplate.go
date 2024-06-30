@@ -59,3 +59,17 @@ func (s *SegmentTemplate) GetSegmentInfos() ([]*SegmentTemplateEntryInfo, error)
 
 	return result, nil
 }
+
+func (s *SegmentTemplate) getChunkDuration() (int64, error) {
+	timescale, err := strconv.ParseInt(s.Timescale, 10, 64)
+	if err != nil {
+		return int64(0), err
+	}
+
+	duration, err := s.SegmentTimeline.getChunkDuration()
+	if err != nil {
+		return int64(0), err
+	}
+
+	return duration * 1000 / timescale, nil
+}

@@ -50,3 +50,18 @@ func Parse(b []byte) (*MPD, error) {
 func (m *MPD) Serialize() ([]byte, error) {
 	return xml.MarshalIndent(m, "", "  ")
 }
+
+func (m *MPD) GetChunkDuration() (int64, error) {
+	var chunkDuration int64
+	for _, period := range m.Periods {
+		duration, err := period.getChunkDuration()
+		if err != nil {
+			return int64(0), err
+		}
+		if duration > chunkDuration {
+			chunkDuration = duration
+		}
+	}
+
+	return chunkDuration, nil
+}

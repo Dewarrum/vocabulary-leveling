@@ -27,6 +27,13 @@ func NewDbManifest(videoId uuid.UUID, m *mpd.MPD) (*DbManifest, error) {
 	}, nil
 }
 
+func (m *DbManifest) GetMeta() (*mpd.MPD, error) {
+	var manifestMeta mpd.MPD
+	err := json.Unmarshal(m.Meta, &manifestMeta)
+
+	return &manifestMeta, err
+}
+
 type DbManifestMeta struct {
 	Profiles           string      `json:"profiles"`
 	Type               string      `json:"type"`

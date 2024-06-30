@@ -24,3 +24,18 @@ func (s *SegmentTimeline) GetTotalDuration() (int64, error) {
 
 	return totalDuration, nil
 }
+
+func (s *SegmentTimeline) getChunkDuration() (int64, error) {
+	var chunkDuration int64
+	for _, entry := range s.SegmentTimelineEntries {
+		duration, err := strconv.ParseInt(entry.Duration, 10, 64)
+		if err != nil {
+			return int64(0), err
+		}
+		if duration > chunkDuration {
+			chunkDuration = duration
+		}
+	}
+
+	return chunkDuration, nil
+}

@@ -32,9 +32,11 @@
 
 		if (player) {
 			player.src(`${PUBLIC_API}/api/videos/manifest.mpd?subtitleId=${subtitleId}`);
+			// player.src(`/manifest.mpd`);
 			player.controls(true);
 			player.width(width);
 			player.height(height);
+			player.volume(0.1);
 		}
 	}
 </script>

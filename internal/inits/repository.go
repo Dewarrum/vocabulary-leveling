@@ -71,7 +71,7 @@ func (r *InitsRepository) GetByVideoId(videoId uuid.UUID, ctx context.Context) (
 	r.logger.Debug().Str("videoId", videoId.String()).Msg("Searching inits by video id")
 
 	var inits []*DbInit
-	err := r.db.SelectContext(ctx, &inits, "SELECT * FROM inits WHERE video_id = $1", videoId)
+	err := r.db.SelectContext(ctx, &inits, "SELECT * FROM inits WHERE video_id = $1 ORDER BY representation_id", videoId)
 	if err != nil {
 		return nil, errors.Join(err, ErrFailedToGetInits)
 	}

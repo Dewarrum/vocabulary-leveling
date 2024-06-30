@@ -107,18 +107,18 @@ func (r *SubtitlesRepository) GetManyByIds(ids []string, context context.Context
 	return subtitles, nil
 }
 
-func (r *SubtitlesRepository) GetRange(videoId uuid.UUID, fromSequence int, toSequence int, ctx context.Context) ([]*DbSubtitle, error) {
-	ctx, span := r.tracer.Start(ctx, "subtitles.repository.getRange")
+func (r *SubtitlesRepository) GetById(id string, ctx context.Context) (*DbSubtitle, error) {
+	ctx, span := r.tracer.Start(ctx, "subtitles.repository.getById")
 	defer span.End()
-	r.logger.Debug().Str("videoId", videoId.String()).Int32("fromSequence", int32(fromSequence)).Int32("toSequence", int32(toSequence)).Msg("Searching subtitles by range")
+	r.logger.Debug().Str("id", id).Msg("Searching subtitle by id")
 
-	var subtitle []*DbSubtitle
-	err := sqlx.SelectContext(ctx, r.db, &subtitle, "SELECT * FROM subtitles WHERE video_id = $1 AND sequence >= $2 AND sequence <= $3", videoId, fromSequence, toSequence)
+	var subtitle DbSubtitle
+	err := sqlx.GetContext(ctx, r.db, &subtitle, "SELECT * FROM subtitles WHERE id = $1 LIMIT 1", id)
 	if err != nil {
 		return nil, errors.Join(err, ErrFailedToGetSubtitle)
 	}
 
-	return subtitle, nil
+	return &subtitle, nil
 }
 
 func NewSubtitlesRepository(dependencies *app.Dependencies) *SubtitlesRepository {
