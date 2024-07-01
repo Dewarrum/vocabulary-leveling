@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { searchSubtitles } from '$lib/api/subtitles';
-	import SubtitleList from '$lib/components/SubtitleList.svelte';
+	import { searchSubtitles, type Subtitle } from '$lib/api/subtitles';
 	import VideoPlayer from '$lib/components/VideoPlayer.svelte';
 	import { createQuery } from '@tanstack/svelte-query';
 
@@ -11,18 +10,51 @@
 		queryFn: () => searchSubtitles(searchQuery)
 	});
 
-	let subtitleId = '';
+	let selectedSubtitleIndex = 0;
+	let selectedSubtitle: Subtitle | undefined;
 	$: {
-		if ($subtitles.isSuccess) {
-			subtitleId = $subtitles.data[0].id;
+		if ($subtitles.isSuccess && $subtitles.data.length > 0) {
+			selectedSubtitle = $subtitles.data[selectedSubtitleIndex];
+		}
+	}
+
+	function onNextSubtitleSelected() {
+		if (!$subtitles.isSuccess) return;
+
+		if (selectedSubtitleIndex < $subtitles.data.length - 1) {
+			selectedSubtitleIndex++;
+		}
+	}
+
+	function onPreviousSubtitleSelected() {
+		if (!$subtitles.isSuccess) return;
+
+		if (selectedSubtitleIndex > 0) {
+			selectedSubtitleIndex--;
 		}
 	}
 </script>
 
-<main class="flex flex-row gap-4 pt-8 w-3/4 mx-auto">
-	{#if subtitleId}
-		<div class="w-full mx-auto">
-			<VideoPlayer {subtitleId} />
+<main class="flex flex-col gap-4 pt-8 w-3/4 mx-auto">
+	{#if $subtitles.isSuccess && selectedSubtitle}
+		<div class="flex flex-row">
+			<button
+				class="border border-gray-500 px-4 py-2 rounded-md disabled:opacity-50"
+				disabled={selectedSubtitleIndex === 0}
+				on:click={onPreviousSubtitleSelected}>Previous</button
+			>
+			<span class="flex-grow"></span>
+			<button
+				class="border border-gray-500 px-4 py-2 rounded-md disabled:opacity-50"
+				disabled={selectedSubtitleIndex === $subtitles.data.length - 1}
+				on:click={onNextSubtitleSelected}>Next</button
+			>
+		</div>
+		<div class="w-full">
+			<VideoPlayer subtitleId={selectedSubtitle.id} />
+		</div>
+		<div>
+			<span class="text-2xl">{selectedSubtitle.text}</span>
 		</div>
 	{/if}
 </main>

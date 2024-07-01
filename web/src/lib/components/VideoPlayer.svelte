@@ -5,8 +5,6 @@
 
 	export let subtitleId;
 
-	$: console.log(subtitleId);
-
 	let videoRef: HTMLDivElement;
 	const videoElement = document.createElement('video-js');
 	videoElement.classList.add('w-full');
