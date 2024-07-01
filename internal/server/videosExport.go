@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Server) VideosExport(router fiber.Router) {
-	router.Post("/export", func(c *fiber.Ctx) error {
+	router.Post("/videos/export", func(c *fiber.Ctx) error {
 		videoId, err := uuid.Parse(c.Query("videoId"))
 		if err != nil {
 			return c.Status(http.StatusBadRequest).JSON(map[string]string{"error": err.Error()})

@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Server) SubtitlesUpload(router fiber.Router) {
-	router.Post("/upload", func(c *fiber.Ctx) error {
+	router.Post("/subtitles/upload", func(c *fiber.Ctx) error {
 
 		fileHeader, err := c.FormFile("file")
 		if err != nil {

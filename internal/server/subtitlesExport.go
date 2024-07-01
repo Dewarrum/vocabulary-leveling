@@ -11,7 +11,7 @@ import (
 )
 
 func (s *Server) SubtitlesExport(router fiber.Router) {
-	router.Post("/export", func(c *fiber.Ctx) error {
+	router.Post("/subtitles/export", func(c *fiber.Ctx) error {
 		ctx, span := s.Tracer.Start(c.Context(), "export", trace.WithAttributes(attribute.String("videoId", c.Query("videoId"))))
 		defer span.End()
 		videoId, err := uuid.Parse(c.Query("videoId"))

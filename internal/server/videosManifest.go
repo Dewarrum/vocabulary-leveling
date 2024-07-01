@@ -94,7 +94,7 @@ func (s *Server) insertSegmentList(representation *mpd.Representation, chunks []
 }
 
 func (s *Server) VideosManifest(router fiber.Router) {
-	router.Get("/manifest.mpd", func(c *fiber.Ctx) error {
+	router.Get("/videos/manifest.mpd", func(c *fiber.Ctx) error {
 		subtitleId := c.Query("subtitleId")
 		if subtitleId == "" {
 			return c.Status(http.StatusBadRequest).JSON(map[string]string{"error": "subtitleId is required"})

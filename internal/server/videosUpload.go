@@ -8,7 +8,7 @@ import (
 )
 
 func (s *Server) VideosUpload(router fiber.Router) {
-	router.Post("/upload", func(c *fiber.Ctx) error {
+	router.Post("/videos/upload", func(c *fiber.Ctx) error {
 		fileHeader, err := c.FormFile("file")
 		if err != nil {
 			c.Status(http.StatusBadRequest).JSON(map[string]string{"error": err.Error()})
