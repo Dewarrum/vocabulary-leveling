@@ -51,7 +51,7 @@
 			>
 		</div>
 		<div class="w-full">
-			<VideoPlayer subtitleId={selectedSubtitle.id} />
+			<VideoPlayer subtitle={selectedSubtitle} />
 		</div>
 		<div>
 			<span class="text-2xl">{selectedSubtitle.text}</span>
