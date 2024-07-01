@@ -1,6 +1,7 @@
-package subtitles
+package server
 
 import (
+	"dewarrum/vocabulary-leveling/internal/subtitles"
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
@@ -9,9 +10,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-func export(router fiber.Router, messageQueue *MessageQueue, tracer trace.Tracer) {
+func (s *Server) SubtitlesExport(router fiber.Router) {
 	router.Post("/export", func(c *fiber.Ctx) error {
-		ctx, span := tracer.Start(c.Context(), "export", trace.WithAttributes(attribute.String("videoId", c.Query("videoId"))))
+		ctx, span := s.Tracer.Start(c.Context(), "export", trace.WithAttributes(attribute.String("videoId", c.Query("videoId"))))
 		defer span.End()
 		videoId, err := uuid.Parse(c.Query("videoId"))
 		if err != nil {
@@ -20,8 +21,8 @@ func export(router fiber.Router, messageQueue *MessageQueue, tracer trace.Tracer
 			})
 		}
 
-		message := NewExportSubtitlesMessage(videoId)
-		err = messageQueue.Send(message, ctx)
+		message := subtitles.NewExportSubtitlesMessage(videoId)
+		err = s.Subtitles.Messages.Send(message, ctx)
 		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(map[string]string{
 				"error": err.Error(),

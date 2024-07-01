@@ -9,21 +9,13 @@
 
 	let videoRef: HTMLDivElement;
 	const videoElement = document.createElement('video-js');
+	videoElement.classList.add('w-full');
+	videoElement.classList.add('h-auto');
+	videoElement.classList.add('aspect-video');
 
-	$: player = videojs(
-		videoElement,
-		{
-			type: 'application/x-mpegURL',
-			html5: {
-				dash: {
-					useTTML: true
-				}
-			}
-		},
-		() => {
-			videojs.log('player is ready');
-		}
-	);
+	$: player = videojs(videoElement, {
+		type: 'application/x-mpegURL'
+	});
 
 	$: {
 		if (videoRef) {
@@ -34,13 +26,10 @@
 			player.src(`${PUBLIC_API}/api/videos/manifest.mpd?subtitleId=${subtitleId}`);
 			// player.src(`/manifest.mpd`);
 			player.controls(true);
-			player.width(width);
-			player.height(height);
+			player.height('auto');
 			player.volume(0.1);
 		}
 	}
 </script>
 
-<div data-vjs-player>
-	<div bind:this={videoRef} />
-</div>
+<div data-vjs-player bind:this={videoRef}></div>

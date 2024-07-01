@@ -11,27 +11,18 @@
 		queryFn: () => searchSubtitles(searchQuery)
 	});
 
-	$: subtitleId = $page.url.searchParams.get('subtitleId') ?? '';
+	let subtitleId = '';
+	$: {
+		if ($subtitles.isSuccess) {
+			subtitleId = $subtitles.data[0].id;
+		}
+	}
 </script>
 
 <main class="flex flex-row gap-4 pt-8 w-3/4 mx-auto">
-	<div class="flex flex-col basis-3/4">
-		{#if $subtitles.isLoading}
-			<div class="flex justify-center items-center">
-				<div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-900" />
-			</div>
-		{:else if $subtitles.isError}
-			<div class="flex justify-center items-center">
-				<div class="rounded-full h-8 w-8 border-t-2 border-b-2 border-red-500" />
-			</div>
-		{:else if $subtitles.isSuccess}
-			<SubtitleList subtitles={$subtitles.data} />
-		{/if}
-	</div>
-
 	{#if subtitleId}
-		<div class="flex-grow basis-1/4">
-			<VideoPlayer {subtitleId} width={360} />
+		<div class="w-full mx-auto">
+			<VideoPlayer {subtitleId} width={720} />
 		</div>
 	{/if}
 </main>

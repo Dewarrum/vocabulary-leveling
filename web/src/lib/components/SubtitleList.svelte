@@ -11,15 +11,16 @@
 	}
 </script>
 
-<div class="flex flex-col gap-4">
+<div class="flex flex-col gap-8">
 	{#each subtitles as subtitle}
-		<div class="flex gap-2 items-center">
+		<div class="flex gap-4 items-center">
 			<div class="flex flex-col">
 				<div class="text-sm font-medium">
-					<h2 class="text-lg">
+					<h2 class="text-lg text-blue-900">
 						<a href={renderPreviewVideoLink(subtitle.id)}>{subtitle.text}</a>
 					</h2>
 				</div>
+				<h2 class="text-sm">{subtitle.videoName}</h2>
 			</div>
 		</div>
 	{/each}

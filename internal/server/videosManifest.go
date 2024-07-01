@@ -1,13 +1,11 @@
-package videos
+package server
 
 import (
 	"bytes"
 	"context"
 	"dewarrum/vocabulary-leveling/internal/chunks"
 	"dewarrum/vocabulary-leveling/internal/inits"
-	"dewarrum/vocabulary-leveling/internal/manifests"
 	"dewarrum/vocabulary-leveling/internal/mpd"
-	"dewarrum/vocabulary-leveling/internal/subtitles"
 	"dewarrum/vocabulary-leveling/internal/utils"
 	"errors"
 	"fmt"
@@ -15,7 +13,6 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/rs/zerolog"
 )
 
 func insertPresignedChunkStreams(segmentList *mpd.SegmentList, presignedUrls []string) error {
@@ -29,10 +26,10 @@ func insertPresignedChunkStreams(segmentList *mpd.SegmentList, presignedUrls []s
 	return nil
 }
 
-func presignChunks(chunks []*chunks.DbChunk, fileStorage *FileStorage, ctx context.Context) ([]string, error) {
+func (s *Server) presignChunks(chunks []*chunks.DbChunk, ctx context.Context) ([]string, error) {
 	var presignedUrls []string
 	for _, chunk := range chunks {
-		presignedChunk, err := fileStorage.PresignObject(chunk.ContentLocation, ctx)
+		presignedChunk, err := s.Videos.FileStorage.PresignObject(chunk.ContentLocation, ctx)
 		if err != nil {
 			return nil, errors.Join(err, errors.New("failed to presign object"))
 		}
@@ -61,8 +58,8 @@ func ExtendRange(startMs int64, endMs int64, desiredDuration int64) (s int64, e 
 	return s, e
 }
 
-func insertSegmentList(representation *mpd.Representation, chunks []*chunks.DbChunk, init *inits.DbInit, durationMs int64, fileStorage *FileStorage, ctx context.Context) error {
-	presignedVideoChunks, err := presignChunks(chunks, fileStorage, ctx)
+func (s *Server) insertSegmentList(representation *mpd.Representation, chunks []*chunks.DbChunk, init *inits.DbInit, durationMs int64, ctx context.Context) error {
+	presignedVideoChunks, err := s.presignChunks(chunks, ctx)
 	if err != nil {
 		return err
 	}
@@ -79,7 +76,7 @@ func insertSegmentList(representation *mpd.Representation, chunks []*chunks.DbCh
 		Segments:       make([]*mpd.Segment, len(chunks)),
 	}
 
-	presignedInit, err := fileStorage.PresignObject(init.ContentLocation, ctx)
+	presignedInit, err := s.Videos.FileStorage.PresignObject(init.ContentLocation, ctx)
 	if err != nil {
 		return err
 	}
@@ -96,20 +93,20 @@ func insertSegmentList(representation *mpd.Representation, chunks []*chunks.DbCh
 	return nil
 }
 
-func manifest(router fiber.Router, fileStorage *FileStorage, subtitleRepository *subtitles.SubtitlesRepository, manifestsRepository *manifests.ManifestsRepository, initsRepository *inits.InitsRepository, chunksRepository *chunks.ChunksRepository, logger zerolog.Logger) {
+func (s *Server) VideosManifest(router fiber.Router) {
 	router.Get("/manifest.mpd", func(c *fiber.Ctx) error {
 		subtitleId := c.Query("subtitleId")
 		if subtitleId == "" {
 			return c.Status(http.StatusBadRequest).JSON(map[string]string{"error": "subtitleId is required"})
 		}
 
-		subtitle, err := subtitleRepository.GetById(subtitleId, c.Context())
+		subtitle, err := s.Subtitles.Repository.GetById(subtitleId, c.Context())
 		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 		}
 		videoId := subtitle.VideoId
 
-		dbManifest, err := manifestsRepository.GetByVideoId(videoId, c.Context())
+		dbManifest, err := s.ManifestsRepository.GetByVideoId(videoId, c.Context())
 		if err != nil {
 			c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 			return err
@@ -121,25 +118,25 @@ func manifest(router fiber.Router, fileStorage *FileStorage, subtitleRepository 
 			return err
 		}
 
-		dbInits, err := initsRepository.GetByVideoId(videoId, c.Context())
+		dbInits, err := s.InitsRepository.GetByVideoId(videoId, c.Context())
 		if err != nil {
 			c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 			return err
 		}
 
 		chunkDuration, err := manifestMeta.GetChunkDuration()
-		logger.Debug().Int64("chunkDuration", chunkDuration).Msg("Chunk duration")
+		s.Logger.Debug().Int64("chunkDuration", chunkDuration).Msg("Chunk duration")
 		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 		}
 
-		logger.Debug().Int64("startMs", subtitle.StartMs).Int64("endMs", subtitle.EndMs).Msg("Subtitle range")
+		s.Logger.Debug().Int64("startMs", subtitle.StartMs).Int64("endMs", subtitle.EndMs).Msg("Subtitle range")
 		subtitleDuration := subtitle.EndMs - subtitle.StartMs
-		logger.Debug().Int64("subtitleDuration", subtitleDuration).Msg("Subtitle duration")
+		s.Logger.Debug().Int64("subtitleDuration", subtitleDuration).Msg("Subtitle duration")
 
 		startMs, endMs := ExtendRange(subtitle.StartMs, subtitle.EndMs, max(subtitleDuration, chunkDuration)*2)
 
-		dbChunks, err := chunksRepository.GetMany(videoId, startMs, endMs, c.Context())
+		dbChunks, err := s.ChunksRepository.GetMany(videoId, startMs, endMs, c.Context())
 		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 		}
@@ -147,8 +144,8 @@ func manifest(router fiber.Router, fileStorage *FileStorage, subtitleRepository 
 		dbVideoChunks := utils.Filter(dbChunks, func(chunk *chunks.DbChunk) bool { return chunk.RepresentationId == "0" })
 		dbAudioChunks := utils.Filter(dbChunks, func(chunk *chunks.DbChunk) bool { return chunk.RepresentationId == "1" })
 
-		insertSegmentList(manifestMeta.GetRepresentation("0"), dbVideoChunks, dbInits[0], 1, fileStorage, c.Context())
-		insertSegmentList(manifestMeta.GetRepresentation("1"), dbAudioChunks, dbInits[1], 1, fileStorage, c.Context())
+		s.insertSegmentList(manifestMeta.GetRepresentation("0"), dbVideoChunks, dbInits[0], 1, c.Context())
+		s.insertSegmentList(manifestMeta.GetRepresentation("1"), dbAudioChunks, dbInits[1], 1, c.Context())
 
 		c.Set("Content-Type", "application/dash+xml")
 		serialized, err := manifestMeta.Serialize()

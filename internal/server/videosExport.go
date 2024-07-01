@@ -1,22 +1,23 @@
-package videos
+package server
 
 import (
+	"dewarrum/vocabulary-leveling/internal/videos"
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
 
-func export(router fiber.Router, messageQueue *MessageQueue) {
+func (s *Server) VideosExport(router fiber.Router) {
 	router.Post("/export", func(c *fiber.Ctx) error {
 		videoId, err := uuid.Parse(c.Query("videoId"))
 		if err != nil {
 			return c.Status(http.StatusBadRequest).JSON(map[string]string{"error": err.Error()})
 		}
 
-		message := NewExportVideoMessage(videoId)
+		message := videos.NewExportVideoMessage(videoId)
 
-		err = messageQueue.Send(message, c.Context())
+		err = s.Videos.Messages.Send(message, c.Context())
 		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 		}

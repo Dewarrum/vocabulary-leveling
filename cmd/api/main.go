@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"dewarrum/vocabulary-leveling/internal/app"
+	"dewarrum/vocabulary-leveling/internal/server"
 	"dewarrum/vocabulary-leveling/internal/subtitles"
 	"dewarrum/vocabulary-leveling/internal/videos"
 	"os"
@@ -27,6 +28,12 @@ func main() {
 		panic(err)
 	}
 	defer dependencies.Close(ctx)
+
+	server, err := server.NewServer(dependencies, ctx)
+	if err != nil {
+		dependencies.Logger.Fatal().Err(err).Msg("Failed to create server")
+		panic(err)
+	}
 
 	videoExporter, err := videos.NewExporter(dependencies)
 	if err != nil {
@@ -63,9 +70,13 @@ func main() {
 	api.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 	}))
+	server.SubtitlesSearch(api)
+	server.SubtitlesUpload(api)
+	server.SubtitlesExport(api)
 
-	videos.MapEndpoints(api, dependencies)
-	subtitles.MapEndpoints(api, dependencies, ctx)
+	server.VideosManifest(api)
+	server.VideosUpload(api)
+	server.VideosExport(api)
 
 	if err := app.Listen(":3000"); err != nil {
 		dependencies.Logger.Fatal().Err(err).Msg("Failed to start server")

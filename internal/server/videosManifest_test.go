@@ -1,7 +1,7 @@
-package videos_test
+package server_test
 
 import (
-	"dewarrum/vocabulary-leveling/internal/videos"
+	"dewarrum/vocabulary-leveling/internal/server"
 	"testing"
 )
 
@@ -10,7 +10,7 @@ func TestExtendRangeWhenRangeIsBigger(t *testing.T) {
 	endMs := int64(5000)
 	desiredDuration := int64(3000)
 
-	s, e := videos.ExtendRange(startMs, endMs, desiredDuration)
+	s, e := server.ExtendRange(startMs, endMs, desiredDuration)
 
 	if s != startMs {
 		t.Errorf("Expected startMs to be %d, but got %d", startMs, s)
@@ -26,7 +26,7 @@ func TestExtendRangeWhenRangeIsSmaller(t *testing.T) {
 	endMs := int64(2000)
 	desiredDuration := int64(2000)
 
-	s, e := videos.ExtendRange(startMs, endMs, desiredDuration)
+	s, e := server.ExtendRange(startMs, endMs, desiredDuration)
 
 	if s != 500 {
 		t.Errorf("Expected startMs to be %d, but got %d", 0, s)
@@ -42,7 +42,7 @@ func TestExtendRangeWhenStartIsZero(t *testing.T) {
 	endMs := int64(1000)
 	desiredDuration := int64(2000)
 
-	s, e := videos.ExtendRange(startMs, endMs, desiredDuration)
+	s, e := server.ExtendRange(startMs, endMs, desiredDuration)
 
 	if s != 0 {
 		t.Errorf("Expected startMs to be %d, but got %d", 0, s)

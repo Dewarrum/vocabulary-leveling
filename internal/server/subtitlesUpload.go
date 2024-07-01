@@ -1,14 +1,14 @@
-package videos
+package server
 
 import (
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 )
 
-func upload(router fiber.Router, fileStorage *FileStorage) {
+func (s *Server) SubtitlesUpload(router fiber.Router) {
 	router.Post("/upload", func(c *fiber.Ctx) error {
+
 		fileHeader, err := c.FormFile("file")
 		if err != nil {
 			c.Status(http.StatusBadRequest).JSON(map[string]string{"error": err.Error()})
@@ -23,14 +23,14 @@ func upload(router fiber.Router, fileStorage *FileStorage) {
 
 		defer file.Close()
 
-		videoId := uuid.New()
+		videoId := c.FormValue("videoId")
 
-		err = fileStorage.Upload(videoId, file, fileHeader.Header.Get("Content-Type"), c.Context())
+		err = s.Subtitles.FileStorage.Upload(videoId, file, fileHeader.Header.Get("Content-Type"), c.Context())
 		if err != nil {
 			c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 			return nil
 		}
 
-		return c.Status(http.StatusOK).JSON(map[string]string{"videoId": videoId.String()})
+		return c.Status(http.StatusOK).JSON(map[string]string{"message": "Subtitles uploaded successfully"})
 	})
 }
