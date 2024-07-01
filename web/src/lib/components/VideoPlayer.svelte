@@ -4,8 +4,8 @@
 	import 'video.js/dist/video-js.css';
 
 	export let subtitleId;
-	export let width: number | string | undefined = undefined;
-	export let height: number | string | undefined = undefined;
+
+	$: console.log(subtitleId);
 
 	let videoRef: HTMLDivElement;
 	const videoElement = document.createElement('video-js');

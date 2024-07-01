@@ -22,7 +22,7 @@
 <main class="flex flex-row gap-4 pt-8 w-3/4 mx-auto">
 	{#if subtitleId}
 		<div class="w-full mx-auto">
-			<VideoPlayer {subtitleId} width={720} />
+			<VideoPlayer {subtitleId} />
 		</div>
 	{/if}
 </main>
