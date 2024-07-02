@@ -1,5 +1,3 @@
-import { PUBLIC_API } from "$env/static/public";
-
 export type Subtitle = {
     id: string;
     videoName: string;
@@ -13,7 +11,7 @@ async function searchSubtitles(query: string) {
         return [];
     }
 
-    const response = await fetch(`${PUBLIC_API}/api/subtitles/search?query=${query}`, {
+    const response = await fetch(`/api/subtitles/search?query=${query}`, {
         method: 'GET'
     });
 

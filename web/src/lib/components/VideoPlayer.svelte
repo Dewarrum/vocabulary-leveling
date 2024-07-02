@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { PUBLIC_API } from '$env/static/public';
 	import type { Subtitle } from '$lib/api/subtitles';
 	import videojs from 'video.js';
 	import 'video.js/dist/video-js.css';
@@ -29,7 +28,7 @@
 
 	$: {
 		if (player) {
-			player.src(`${PUBLIC_API}/api/videos/manifest.mpd?subtitleId=${subtitle.id}`);
+			player.src(`/api/videos/manifest.mpd?subtitleId=${subtitle.id}`);
 			player.controls(true);
 			player.height('auto');
 			player.volume(0.1);
