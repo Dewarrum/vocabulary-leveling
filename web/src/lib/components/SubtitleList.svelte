@@ -13,7 +13,7 @@
 
 <div class="flex flex-col gap-8">
 	{#each subtitles as subtitle}
-		<div class="flex gap-4 items-center">
+		<div class="flex items-center gap-4">
 			<div class="flex flex-col">
 				<div class="text-sm font-medium">
 					<h2 class="text-lg text-blue-900">

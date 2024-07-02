@@ -13,10 +13,10 @@
 </script>
 
 <SimpleHeader />
-<main class="flex flex-col items-center mt-96">
+<main class="mt-96 flex flex-col items-center">
 	<h1 class="text-3xl">Vocabulary Leveling</h1>
 	<form class="w-[586px] p-4" on:submit|preventDefault={onSubmit}>
-		<input class="w-full border-2 border-gray-300 rounded-md p-4" type="text" bind:value={query} />
+		<input class="w-full rounded-md border-2 border-gray-300 p-4" type="text" bind:value={query} />
 		<button class="hidden">Search</button>
 	</form>
 </main>

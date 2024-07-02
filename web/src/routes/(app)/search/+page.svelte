@@ -35,17 +35,17 @@
 	}
 </script>
 
-<main class="flex flex-col gap-4 pt-8 w-3/4 mx-auto">
+<main class="mx-auto flex w-3/4 flex-col gap-4 pt-8">
 	{#if $subtitles.isSuccess && selectedSubtitle}
 		<div class="flex flex-row">
 			<button
-				class="border border-gray-500 px-4 py-2 rounded-md disabled:opacity-50"
+				class="rounded-md border border-gray-500 px-4 py-2 disabled:opacity-50"
 				disabled={selectedSubtitleIndex === 0}
 				on:click={onPreviousSubtitleSelected}>Previous</button
 			>
 			<span class="flex-grow"></span>
 			<button
-				class="border border-gray-500 px-4 py-2 rounded-md disabled:opacity-50"
+				class="rounded-md border border-gray-500 px-4 py-2 disabled:opacity-50"
 				disabled={selectedSubtitleIndex === $subtitles.data.length - 1}
 				on:click={onNextSubtitleSelected}>Next</button
 			>
