@@ -70,13 +70,10 @@ func main() {
 	api.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 	}))
-	server.SubtitlesSearch(api)
-	server.SubtitlesUpload(api)
-	server.SubtitlesExport(api)
 
 	server.VideosManifest(api)
 	server.VideosUpload(api)
-	server.VideosExport(api)
+	server.SubtitlesSearch(api)
 
 	if err := app.Listen(":3000"); err != nil {
 		dependencies.Logger.Fatal().Err(err).Msg("Failed to start server")

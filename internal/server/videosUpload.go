@@ -1,6 +1,7 @@
 package server
 
 import (
+	"dewarrum/vocabulary-leveling/internal/subtitles"
 	"dewarrum/vocabulary-leveling/internal/videos"
 	"net/http"
 
@@ -9,32 +10,65 @@ import (
 
 func (s *Server) VideosUpload(router fiber.Router) {
 	router.Post("/videos/upload", func(c *fiber.Ctx) error {
-		fileHeader, err := c.FormFile("file")
+		videoHeader, err := c.FormFile("video")
 		if err != nil {
 			c.Status(http.StatusBadRequest).JSON(map[string]string{"error": err.Error()})
 			return nil
 		}
 
-		file, err := fileHeader.Open()
+		videoFile, err := videoHeader.Open()
 		if err != nil {
 			c.Status(http.StatusBadRequest).JSON(map[string]string{"error": err.Error()})
 			return nil
 		}
-		defer file.Close()
+		defer videoFile.Close()
 
-		fileName := c.FormValue("name")
-		if fileName == "" {
+		videoName := c.FormValue("videoName")
+		if videoName == "" {
 			return c.Status(http.StatusBadRequest).JSON(map[string]string{"error": "name is required"})
 		}
 
-		video := videos.NewDbVideo(fileName)
+		subtitlesHeader, err := c.FormFile("subtitles")
+		if err != nil {
+			c.Status(http.StatusBadRequest).JSON(map[string]string{"error": err.Error()})
+			return nil
+		}
+
+		subtitlesFile, err := subtitlesHeader.Open()
+		if err != nil {
+			c.Status(http.StatusBadRequest).JSON(map[string]string{"error": err.Error()})
+			return nil
+		}
+		defer subtitlesFile.Close()
+
+		video := videos.NewDbVideo(videoName)
 		_, err = s.Videos.Repository.Insert(video, c.Context())
 		if err != nil {
 			c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 			return nil
 		}
 
-		err = s.Videos.FileStorage.Upload(video.Id, file, fileHeader.Header.Get("Content-Type"), c.Context())
+		err = s.Videos.FileStorage.Upload(video.Id, videoFile, videoHeader.Header.Get("Content-Type"), c.Context())
+		if err != nil {
+			c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
+			return nil
+		}
+
+		exportVideoMessage := videos.NewExportVideoMessage(video.Id)
+		err = s.Videos.Messages.Send(exportVideoMessage, c.Context())
+		if err != nil {
+			c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
+			return nil
+		}
+
+		err = s.Subtitles.FileStorage.Upload(video.Id, subtitlesFile, subtitlesHeader.Header.Get("Content-Type"), c.Context())
+		if err != nil {
+			c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
+			return nil
+		}
+
+		exportSubtitlesMessage := subtitles.NewExportSubtitlesMessage(video.Id)
+		err = s.Subtitles.Messages.Send(exportSubtitlesMessage, c.Context())
 		if err != nil {
 			c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 			return nil
