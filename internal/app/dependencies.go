@@ -5,6 +5,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/gofiber/fiber/v2/middleware/session"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/rabbitmq/amqp091-go"
@@ -19,6 +20,7 @@ type Dependencies struct {
 	RabbitMqChannel     *amqp091.Channel
 	Postgres            *sqlx.DB
 	ElasticsearchClient *elasticsearch.TypedClient
+	SessionStore        *session.Store
 	Logger              zerolog.Logger
 	Tracer              trace.Tracer
 }
@@ -64,12 +66,20 @@ func NewDependencies(ctx context.Context) (*Dependencies, error) {
 		return nil, err
 	}
 
+	logger.Info().Msg("Creating Redis client")
+	sessionStore, err := createSessionStore()
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to create Redis client")
+		return nil, err
+	}
+
 	return &Dependencies{
 		S3Client:            s3Client,
 		S3PresignClient:     s3PresignClient,
 		RabbitMqChannel:     rabbitMqChannel,
 		Postgres:            db,
 		ElasticsearchClient: elasticsearchClient,
+		SessionStore:        sessionStore,
 		Logger:              logger,
 		Tracer:              tracer,
 	}, nil

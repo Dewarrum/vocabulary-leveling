@@ -9,6 +9,8 @@ import (
 	"dewarrum/vocabulary-leveling/internal/subtitles"
 	"dewarrum/vocabulary-leveling/internal/videos"
 
+	"github.com/gofiber/fiber/v2/middleware/session"
+	"github.com/logto-io/go/client"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -20,6 +22,9 @@ type Server struct {
 	ChunksRepository    *chunks.ChunksRepository
 	InitsRepository     *inits.InitsRepository
 	ManifestsRepository *manifests.ManifestsRepository
+
+	LogtoConfig  *client.LogtoConfig
+	SessionStore *session.Store
 
 	Logger zerolog.Logger
 	Tracer trace.Tracer
@@ -49,12 +54,19 @@ func NewServer(dependencies *app.Dependencies, ctx context.Context) (*Server, er
 		return nil, err
 	}
 
+	logtoConfig, err := newLogtoConfig()
+	if err != nil {
+		return nil, err
+	}
+
 	return &Server{
 		Videos:              videoContext,
 		Subtitles:           subtitleContext,
 		ChunksRepository:    chunks.NewChunksRepository(dependencies),
 		InitsRepository:     inits.NewInitsRepository(dependencies),
 		ManifestsRepository: manifests.NewManifestsRepository(dependencies),
+		LogtoConfig:         logtoConfig,
+		SessionStore:        dependencies.SessionStore,
 		Logger:              dependencies.Logger,
 		Tracer:              dependencies.Tracer,
 	}, nil

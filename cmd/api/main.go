@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/gofiber/contrib/fiberzerolog"
 	"github.com/gofiber/contrib/otelfiber"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -30,7 +31,7 @@ func main() {
 	}
 	defer dependencies.Close(ctx)
 
-	server, err := server.NewServer(dependencies, ctx)
+	srv, err := server.NewServer(dependencies, ctx)
 	if err != nil {
 		dependencies.Logger.Fatal().Err(err).Msg("Failed to create server")
 		panic(err)
@@ -61,6 +62,9 @@ func main() {
 	app := fiber.New(fiber.Config{
 		BodyLimit: 500 * 1024 * 1024,
 	})
+	app.Use(fiberzerolog.New(fiberzerolog.Config{
+		Logger: &dependencies.Logger,
+	}))
 	app.Use(otelfiber.Middleware())
 
 	api := app.Group("/api")
@@ -68,9 +72,15 @@ func main() {
 		AllowOrigins: "*",
 	}))
 
-	server.VideosManifest(api)
-	server.VideosUpload(api)
-	server.SubtitlesSearch(api)
+	srv.VideosManifest(api)
+	srv.VideosUpload(api)
+	srv.SubtitlesSearch(api)
+
+	auth := api.Group("/auth")
+
+	srv.Profile(auth)
+	srv.SignIn(auth)
+	srv.SignInCallback(auth)
 
 	if os.Getenv("ENVIRONMENT") != "development" {
 		app.Static("/", "./web/build")

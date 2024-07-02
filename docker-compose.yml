@@ -51,3 +51,10 @@ services:
       - "xpack.security.enrollment.enabled=false"
       - "xpack.security.enabled=false"
     restart: unless-stopped
+  redis:
+    image: redis:7.2.5-bookworm
+    environment:
+      - REDIS_PASSWORD=root
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
