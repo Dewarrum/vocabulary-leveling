@@ -96,7 +96,7 @@ func (e *Exporter) handleMessage(message ExportVideoMessage, context context.Con
 	if err != nil {
 		return errors.Join(err, errors.New("failed to create directory"))
 	}
-	// defer os.RemoveAll(directory)
+	defer os.RemoveAll(directory)
 
 	err = e.downloadVideo(message.VideoId, directory, context)
 	if err != nil {
