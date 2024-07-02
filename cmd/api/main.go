@@ -62,10 +62,6 @@ func main() {
 	})
 	app.Use(otelfiber.Middleware())
 
-	app.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("Hello World")
-	})
-
 	api := app.Group("/api")
 	api.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
@@ -74,6 +70,11 @@ func main() {
 	server.VideosManifest(api)
 	server.VideosUpload(api)
 	server.SubtitlesSearch(api)
+
+	app.Static("/", "./web/build")
+	app.Get("/*", func(c *fiber.Ctx) error {
+		return c.SendFile("./web/build/index.html")
+	})
 
 	if err := app.Listen(":3000"); err != nil {
 		dependencies.Logger.Fatal().Err(err).Msg("Failed to start server")
