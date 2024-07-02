@@ -12,14 +12,14 @@
 	videoElement.classList.add('h-auto');
 	videoElement.classList.add('aspect-video');
 
-	let textTrack: TextTrack | undefined;
-
 	let player = videojs(videoElement, {
 		type: 'application/x-mpegURL',
 		html5: {
 			nativeTextTracks: false
 		}
 	});
+
+	let textTrack = player.addTextTrack('subtitles', 'korean', 'kr');
 
 	$: {
 		if (videoRef) {
@@ -33,8 +33,6 @@
 			player.controls(true);
 			player.height('auto');
 			player.volume(0.1);
-
-			textTrack = player.addTextTrack('subtitles', 'korean', 'kr');
 		}
 	}
 
@@ -48,6 +46,7 @@
 			}
 
 			cue = new VTTCue(0, 1000, subtitle.text);
+			cue.id = 'cue';
 			textTrack.addCue(cue);
 		}
 	}
