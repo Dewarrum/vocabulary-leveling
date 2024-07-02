@@ -71,10 +71,12 @@ func main() {
 	server.VideosUpload(api)
 	server.SubtitlesSearch(api)
 
-	app.Static("/", "./web/build")
-	app.Get("/*", func(c *fiber.Ctx) error {
-		return c.SendFile("./web/build/index.html")
-	})
+	if os.Getenv("ENVIRONMENT") != "development" {
+		app.Static("/", "./web/build")
+		app.Get("/*", func(c *fiber.Ctx) error {
+			return c.SendFile("./web/build/index.html")
+		})
+	}
 
 	if err := app.Listen(":3000"); err != nil {
 		dependencies.Logger.Fatal().Err(err).Msg("Failed to start server")
