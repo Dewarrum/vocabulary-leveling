@@ -1,0 +1,6 @@
+tmp
+.env
+.env.secret
+.gitignore
+docker-compose.yml
+Elasticsearch.Dockerfile

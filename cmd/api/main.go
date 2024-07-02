@@ -6,6 +6,7 @@ import (
 	"dewarrum/vocabulary-leveling/internal/server"
 	"dewarrum/vocabulary-leveling/internal/subtitles"
 	"dewarrum/vocabulary-leveling/internal/videos"
+	"fmt"
 	"os"
 	"os/signal"
 
@@ -78,7 +79,12 @@ func main() {
 		})
 	}
 
-	if err := app.Listen(":3000"); err != nil {
+	port := os.Getenv("PORT")
+	if port == "" {
+		panic("PORT is required")
+	}
+
+	if err := app.Listen(fmt.Sprintf(":%s", port)); err != nil {
 		dependencies.Logger.Fatal().Err(err).Msg("Failed to start server")
 	}
 }

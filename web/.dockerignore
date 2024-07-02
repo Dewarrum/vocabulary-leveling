@@ -1,0 +1,8 @@
+.gitignore
+dist
+build
+Dockerfile*
+node_modules
+*.md
+.env*
+.svelte*
