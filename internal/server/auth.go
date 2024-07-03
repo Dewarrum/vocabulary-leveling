@@ -16,7 +16,14 @@ func (s *Server) SignIn(router fiber.Router) {
 		}
 		defer auth.Close()
 
-		signInUrl, err := auth.LogtoClient.SignIn(fmt.Sprintf("%s://%s/api/auth/callback", c.Protocol(), c.Hostname()))
+		backUrl := c.Query("backUrl")
+		if backUrl == "" {
+			backUrl = "/"
+		}
+
+		auth.Session.Set("backUrl", backUrl)
+
+		signInUrl, err := auth.LogtoClient.SignIn(fmt.Sprintf("%s://%s/auth/callback", c.Protocol(), c.Hostname()))
 		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 		}
@@ -46,7 +53,31 @@ func (s *Server) SignInCallback(router fiber.Router) {
 			return c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
 		}
 
-		return c.Status(http.StatusOK).JSON(map[string]string{"message": "Successfully signed in"})
+		backUrl := auth.Session.Get("backUrl").(string)
+		if backUrl == "" {
+			backUrl = "/"
+		}
+
+		return c.Status(http.StatusTemporaryRedirect).Redirect(backUrl)
+	})
+}
+
+func (s *Server) SignOut(router fiber.Router) {
+	router.Get("/sign-out", func(c *fiber.Ctx) error {
+		auth, err := s.NewAuthenticationService(c)
+		if err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
+		}
+		defer auth.Close()
+
+		s.Logger.Info().Str("postLogoutRedirectUri", fmt.Sprintf("%s://%s", c.Protocol(), c.Hostname())).Msg("Signing out")
+
+		redirectUri, err := auth.LogtoClient.SignOut(fmt.Sprintf("%s://%s", c.Protocol(), c.Hostname()))
+		if err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
+		}
+
+		return c.Status(http.StatusTemporaryRedirect).Redirect(redirectUri)
 	})
 }
 

@@ -67,24 +67,23 @@ func main() {
 	}))
 	app.Use(otelfiber.Middleware())
 
-	api := app.Group("/api")
+	api := app.Group("/api", srv.RequireAuthenticationMiddleware())
 	api.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 	}))
 
-	publicApi := api.Group("/", srv.RequireAuthenticationMiddleware())
-
-	srv.VideosManifest(publicApi)
-	srv.SubtitlesSearch(publicApi)
+	srv.VideosManifest(api)
+	srv.SubtitlesSearch(api)
 
 	adminApi := api.Group("/admin", srv.RequireAuthorizationMiddleware("Admin"))
 	srv.VideosUpload(adminApi)
 
-	authApi := api.Group("/auth")
+	authApi := app.Group("/auth")
 
 	srv.Profile(authApi)
 	srv.SignIn(authApi)
 	srv.SignInCallback(authApi)
+	srv.SignOut(authApi)
 
 	if os.Getenv("ENVIRONMENT") != "development" {
 		app.Static("/", "./web/build")

@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import QueryHeader from '$lib/components/QueryHeader.svelte';
+	import Header from '$lib/components/Header.svelte';
 
 	const query = $page.url.searchParams.get('query') ?? '';
 </script>
 
-<QueryHeader queryText={query} />
+<Header showQuerySearch={true} queryText={query} />
 <slot />
