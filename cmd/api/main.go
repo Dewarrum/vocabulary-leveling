@@ -14,7 +14,12 @@ import (
 	"github.com/gofiber/contrib/otelfiber"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
 func main() {
@@ -30,6 +35,12 @@ func main() {
 		panic(err)
 	}
 	defer dependencies.Close(ctx)
+
+	err = runMigrations(dependencies.Postgres)
+	if err != nil {
+		dependencies.Logger.Fatal().Err(err).Msg("Failed to run migrations")
+		panic(err)
+	}
 
 	srv, err := server.NewServer(dependencies, ctx)
 	if err != nil {
@@ -100,4 +111,23 @@ func main() {
 	if err := app.Listen(fmt.Sprintf(":%s", port)); err != nil {
 		dependencies.Logger.Fatal().Err(err).Msg("Failed to start server")
 	}
+}
+
+func runMigrations(db *sqlx.DB) error {
+	driver, err := postgres.WithInstance(db.DB, &postgres.Config{})
+	if err != nil {
+		return err
+	}
+
+	m, err := migrate.NewWithDatabaseInstance("file://db/migrations", "vocabulary-leveling", driver)
+	if err != nil {
+		return err
+	}
+
+	err = m.Up()
+	if err != nil && err != migrate.ErrNoChange {
+		return err
+	}
+
+	return nil
 }
