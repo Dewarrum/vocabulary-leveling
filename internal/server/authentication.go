@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"net/http"
 	"os"
 
 	"github.com/gofiber/fiber/v2"
@@ -30,6 +31,7 @@ func newLogtoConfig() (*client.LogtoConfig, error) {
 		Endpoint:  endpoint,
 		AppId:     appId,
 		AppSecret: appSecret,
+		Scopes:    []string{"roles"},
 	}, nil
 }
 
@@ -59,4 +61,19 @@ func (s *Server) NewAuthenticationService(c *fiber.Ctx) (*AuthenticationService,
 
 func (as *AuthenticationService) Close() {
 	as.Session.Save()
+}
+
+func (s *Server) RequireAuthenticationMiddleware() func(c *fiber.Ctx) error {
+	return func(c *fiber.Ctx) error {
+		auth, err := s.NewAuthenticationService(c)
+		if err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(map[string]string{"error": err.Error()})
+		}
+
+		if !auth.LogtoClient.IsAuthenticated() {
+			return c.Status(http.StatusUnauthorized).JSON(map[string]string{"error": "unauthorized"})
+		}
+
+		return c.Next()
+	}
 }

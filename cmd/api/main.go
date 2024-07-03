@@ -72,15 +72,19 @@ func main() {
 		AllowOrigins: "*",
 	}))
 
-	srv.VideosManifest(api)
-	srv.VideosUpload(api)
-	srv.SubtitlesSearch(api)
+	publicApi := api.Group("/", srv.RequireAuthenticationMiddleware())
 
-	auth := api.Group("/auth")
+	srv.VideosManifest(publicApi)
+	srv.SubtitlesSearch(publicApi)
 
-	srv.Profile(auth)
-	srv.SignIn(auth)
-	srv.SignInCallback(auth)
+	adminApi := api.Group("/admin", srv.RequireAuthorizationMiddleware("Admin"))
+	srv.VideosUpload(adminApi)
+
+	authApi := api.Group("/auth")
+
+	srv.Profile(authApi)
+	srv.SignIn(authApi)
+	srv.SignInCallback(authApi)
 
 	if os.Getenv("ENVIRONMENT") != "development" {
 		app.Static("/", "./web/build")
