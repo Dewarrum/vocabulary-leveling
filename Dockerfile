@@ -19,6 +19,10 @@ FROM alpine:3.20.1
 ARG PORT
 WORKDIR /app
 
+RUN apk update
+RUN apk upgrade
+RUN apk add --no-cache ffmpeg
+
 COPY ./db/migrations ./db/migrations
 COPY --from=web-builder /app/build ./web/build
 COPY --from=builder /app/main ./main
